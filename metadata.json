@@ -1,0 +1,6 @@
+{
+  "name": "CareerPilot AI",
+  "description": "Global AI-powered career assistant for students, freshers, and job seekers featuring intelligent resume analysis, job description matching, tailored cover letters, and application tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
