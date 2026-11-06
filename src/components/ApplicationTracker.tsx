@@ -24,6 +24,7 @@ import {
   fetchUserApplicationsFromCloud,
   saveApplicationToCloud,
   deleteApplicationFromCloud,
+  logFeatureUsageToCloud,
 } from '../lib/supabase';
 import { InterviewPrepModal } from './InterviewPrepModal';
 
@@ -139,7 +140,19 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({ currentU
       const created = storage.addApplication(appData, currentUser?.id);
       if (currentUser?.id) {
         saveApplicationToCloud(currentUser.id, created);
+        logFeatureUsageToCloud(currentUser.id, 'job_application', {
+          company: appData.companyName,
+          role: appData.jobTitle,
+          status: appData.status,
+          matchScore: appData.matchScore,
+        });
       }
+      storage.addUsageLog(
+        'job_application',
+        `Tracked application for ${appData.jobTitle} at ${appData.companyName}`,
+        { company: appData.companyName, role: appData.jobTitle, status: appData.status },
+        currentUser?.id
+      );
     }
 
     setIsModalOpen(false);

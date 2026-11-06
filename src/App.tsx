@@ -28,6 +28,7 @@ import {
   signOutFromSupabase,
   getSupabaseClient,
   saveApplicationToCloud,
+  logFeatureUsageToCloud,
 } from './lib/supabase';
 import { Lock, Sparkles, UserPlus, LogIn } from 'lucide-react';
 
@@ -157,6 +158,15 @@ export default function App() {
     const created = storage.addApplication(appData, currentUser?.id);
     if (currentUser?.id) {
       saveApplicationToCloud(currentUser.id, created);
+      storage.addUsageLog(
+        'job_application',
+        { company: appData.companyName, role: appData.jobTitle },
+        currentUser.id
+      );
+      logFeatureUsageToCloud(currentUser.id, 'job_application', {
+        company: appData.companyName,
+        role: appData.jobTitle,
+      });
     }
     setCurrentPage('tracker');
     window.scrollTo({ top: 0, behavior: 'smooth' });

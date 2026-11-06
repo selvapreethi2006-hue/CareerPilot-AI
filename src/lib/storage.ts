@@ -11,6 +11,9 @@ import {
   PortfolioProfileData,
   SalaryInsightsResult,
   MentorChatMessage,
+  FeatureUsageType,
+  FeatureUsageLog,
+  EngagementSummary,
 } from '../types';
 
 export const SAMPLE_RESUME_TEXT = `Maya Lin
@@ -414,6 +417,125 @@ class StorageService {
     localStorage.removeItem(key);
   }
 
+  // -------------------------------------------------------------
+  // 8. Feature Usage Logs & Engagement Aggregation
+  // -------------------------------------------------------------
+  getUsageLogs(userId?: string): FeatureUsageLog[] {
+    try {
+      const key = this.getKey('usage_logs_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return [];
+  }
+
+  saveUsageLogs(logs: FeatureUsageLog[], userId?: string): void {
+    const key = this.getKey('usage_logs_v3', userId);
+    localStorage.setItem(key, JSON.stringify(logs.slice(0, 100)));
+  }
+
+  addUsageLog(
+    featureName: FeatureUsageType,
+    metadata: Record<string, any> = {},
+    userId?: string
+  ): FeatureUsageLog {
+    const activeUserId = userId || this.getActiveUserId() || 'anonymous';
+    const logs = this.getUsageLogs(userId);
+    const newLog: FeatureUsageLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      userId: activeUserId,
+      featureName,
+      metadata,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [newLog, ...logs];
+    this.saveUsageLogs(updated, userId);
+    return newLog;
+  }
+
+  getEngagementSummary(userId?: string, cloudLogs?: FeatureUsageLog[]): EngagementSummary {
+    const localLogs = this.getUsageLogs(userId);
+    // Merge cloud and local logs deduplicating by ID or timestamp+feature
+    const combinedMap = new Map<string, FeatureUsageLog>();
+    (cloudLogs || []).forEach((log) => combinedMap.set(log.id, log));
+    localLogs.forEach((log) => {
+      if (!combinedMap.has(log.id)) {
+        combinedMap.set(log.id, log);
+      }
+    });
+
+    const allLogs = Array.from(combinedMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    // Also factor in existing saved resumes and applications if logs are empty (bootstrap)
+    const resumes = this.getSavedResumes(userId);
+    const applications = this.getApplications(userId);
+    const skillGaps = this.getSkillGapAnalyses(userId);
+    const interviews = this.getMockInterviewSessions(userId);
+    const letters = this.getSavedCoverLetters(userId);
+
+    const resumeCount = Math.max(
+      resumes.length,
+      allLogs.filter((l) => l.featureName === 'resume_analysis').length
+    );
+    const applicationCount = Math.max(
+      applications.length,
+      allLogs.filter((l) => l.featureName === 'job_application').length
+    );
+    const skillGapsCount = Math.max(
+      skillGaps.length,
+      allLogs.filter((l) => l.featureName === 'skill_gap_analysis').length
+    );
+    const interviewsCount = Math.max(
+      interviews.length,
+      allLogs.filter((l) => l.featureName === 'mock_interview').length
+    );
+    const lettersCount = Math.max(
+      letters.length,
+      allLogs.filter((l) => l.featureName === 'cover_letter').length
+    );
+
+    const totalActions =
+      Math.max(allLogs.length, resumeCount + applicationCount + skillGapsCount + interviewsCount + lettersCount);
+
+    // Determine engagement tier
+    let engagementTier: EngagementSummary['engagementTier'] = 'Novice Explorer';
+    if (totalActions >= 15) engagementTier = 'Elite Candidate';
+    else if (totalActions >= 8) engagementTier = 'Proactive Job Hunter';
+    else if (totalActions >= 3) engagementTier = 'Steady Jobseeker';
+
+    // 7-day activity timeline
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const now = new Date();
+    const weeklyActivity: Array<{ date: string; dayLabel: string; count: number }> = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dayLabel = days[d.getDay()];
+
+      // Count events matching this date
+      const count = allLogs.filter((l) => l.createdAt.startsWith(dateStr)).length;
+      weeklyActivity.push({ date: dateStr, dayLabel, count });
+    }
+
+    return {
+      totalActions,
+      resumeAnalysesCount: resumeCount,
+      jobApplicationsCount: applicationCount,
+      skillGapsCount: skillGapsCount,
+      mockInterviewsCount: interviewsCount,
+      coverLettersCount: lettersCount,
+      engagementTier,
+      weeklyActivity,
+      recentLogs: allLogs.slice(0, 10),
+    };
+  }
+
   clearUserData(userId?: string): void {
     const activeId = userId || this.getActiveUserId();
     if (!activeId) return;
@@ -429,6 +551,7 @@ class StorageService {
     localStorage.removeItem(`cp_${activeId}_portfolio_v3`);
     localStorage.removeItem(`cp_${activeId}_salaries_v3`);
     localStorage.removeItem(`cp_${activeId}_mentor_chat_v3`);
+    localStorage.removeItem(`cp_${activeId}_usage_logs_v3`);
   }
 }
 

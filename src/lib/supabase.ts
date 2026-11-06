@@ -2,7 +2,7 @@
 // Provides config management, dual key format validation, connection testing, and client instance
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile, UserRole, FeatureUsageType, FeatureUsageLog } from '../types';
 
 export interface SupabaseConfig {
   url: string;
@@ -846,4 +846,72 @@ export async function saveResumeAuditToCloud(userId: string, audit: any): Promis
     return false;
   }
 }
+
+// -------------------------------------------------------------
+// FEATURE USAGE TRACKING & ENGAGEMENT METRICS (Supabase table)
+// -------------------------------------------------------------
+export async function logFeatureUsageToCloud(
+  userId: string,
+  featureName: FeatureUsageType,
+  metadata: Record<string, any> = {}
+): Promise<{ success: boolean; id?: string }> {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId) return { success: false };
+
+  try {
+    const payload = {
+      user_id: userId,
+      feature_name: featureName,
+      metadata,
+      created_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('feature_usage_logs')
+      .insert(payload)
+      .select('id')
+      .single();
+
+    if (error) {
+      console.warn('Error logging feature usage to Supabase:', error.message);
+      return { success: false };
+    }
+
+    return { success: true, id: data?.id };
+  } catch (err) {
+    console.warn('Failed syncing feature usage to Supabase:', err);
+    return { success: false };
+  }
+}
+
+export async function fetchCloudFeatureUsage(userId: string): Promise<FeatureUsageLog[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('feature_usage_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.warn('Error fetching feature usage from Supabase:', error.message);
+      return [];
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      featureName: row.feature_name,
+      metadata: row.metadata || {},
+      createdAt: row.created_at,
+    }));
+  } catch (err) {
+    console.warn('Failed retrieving cloud feature usage:', err);
+    return [];
+  }
+}
+
 

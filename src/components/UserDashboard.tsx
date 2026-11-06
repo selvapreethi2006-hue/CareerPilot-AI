@@ -10,6 +10,7 @@ import {
   Clock,
   Calendar,
   CheckCircle,
+  CheckCircle2,
   AlertCircle,
   HelpCircle,
   ExternalLink,
@@ -23,6 +24,11 @@ import {
   Code2,
   Send,
   Layers,
+  Activity,
+  Flame,
+  BarChart3,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import {
   UserProfile,
@@ -32,8 +38,11 @@ import {
   SkillGapResult,
   MockInterviewSession,
   LearningRoadmapResult,
+  EngagementSummary,
+  FeatureUsageLog,
 } from '../types';
 import { storage } from '../lib/storage';
+import { fetchCloudFeatureUsage } from '../lib/supabase';
 
 interface UserDashboardProps {
   currentUser: UserProfile;
@@ -55,6 +64,33 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const [recommendedJobs, setRecommendedJobs] = useState<RemotiveJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState<boolean>(true);
+
+  // Feature usage & engagement state (backed by Supabase table public.feature_usage_logs)
+  const [engagement, setEngagement] = useState<EngagementSummary>(() =>
+    storage.getEngagementSummary(currentUser.id)
+  );
+  const [isSyncingUsage, setIsSyncingUsage] = useState<boolean>(false);
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
+
+  const loadUsageLogs = async () => {
+    setIsSyncingUsage(true);
+    try {
+      const cloudLogs = await fetchCloudFeatureUsage(currentUser.id);
+      const summary = storage.getEngagementSummary(currentUser.id, cloudLogs);
+      setEngagement(summary);
+      if (cloudLogs.length > 0) {
+        setIsCloudSynced(true);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch cloud usage logs', e);
+    } finally {
+      setIsSyncingUsage(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsageLogs();
+  }, [currentUser.id]);
 
   // Fetch live synchronized jobs for dashboard preview
   useEffect(() => {
@@ -553,6 +589,300 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <span>Open Pipeline</span>
               <ChevronRight className="w-3 h-3" />
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Feature Usage & Engagement Activity (Supabase public.feature_usage_logs) */}
+      <div className="space-y-4 p-6 rounded-2xl bg-[#0e121b] border border-[#1e2638] shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#1e2638]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600/20 to-cyan-500/20 border border-violet-500/40 flex items-center justify-center text-cyan-400">
+              <Activity className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white tracking-tight">
+                  Core Feature Usage & Engagement
+                </h2>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-md bg-violet-950/70 border border-violet-700/60 text-violet-300">
+                  Supabase RLS Table
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Audit trail and engagement telemetry tracked under your verified user ID.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Engagement Tier Badge */}
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-violet-950/80 to-indigo-950/80 border border-violet-800 text-xs font-semibold text-violet-200">
+              <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span>{engagement.engagementTier}</span>
+            </div>
+
+            {/* Cloud Sync Status */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#131826] border border-[#1e2638] text-[11px] text-slate-300">
+              <Database className="w-3 h-3 text-cyan-400" />
+              <span className="font-mono text-[10px] text-slate-400">
+                {isCloudSynced ? 'Synced' : 'Active'}
+              </span>
+              <button
+                onClick={loadUsageLogs}
+                disabled={isSyncingUsage}
+                title="Refresh Supabase Usage Logs"
+                className="p-1 text-slate-400 hover:text-cyan-400 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${isSyncingUsage ? 'animate-spin text-cyan-400' : ''}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 4 Feature Usage Metric Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          {/* 1. Resume Analyses */}
+          <div
+            onClick={() => onNavigate('resume-analyzer')}
+            className="p-4 rounded-xl bg-[#131826]/70 border border-[#1e2638] hover:border-cyan-500/50 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider">Resumes Analyzed</span>
+              <FileText className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-white font-mono">
+                {engagement.resumeAnalysesCount}
+              </span>
+              <span className="text-[11px] text-cyan-400 font-semibold group-hover:underline flex items-center gap-0.5">
+                Analyze <ChevronRight className="w-2.5 h-2.5" />
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {engagement.resumeAnalysesCount === 0
+                ? 'No PDFs scanned yet'
+                : `${engagement.resumeAnalysesCount} deep ATS audits run`}
+            </p>
+          </div>
+
+          {/* 2. Job Applications */}
+          <div
+            onClick={() => onNavigate('tracker')}
+            className="p-4 rounded-xl bg-[#131826]/70 border border-[#1e2638] hover:border-indigo-500/50 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider">Jobs Tracked</span>
+              <Briefcase className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-white font-mono">
+                {engagement.jobApplicationsCount}
+              </span>
+              <span className="text-[11px] text-indigo-400 font-semibold group-hover:underline flex items-center gap-0.5">
+                Pipeline <ChevronRight className="w-2.5 h-2.5" />
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {engagement.jobApplicationsCount === 0
+                ? 'No pipeline entries yet'
+                : `${engagement.jobApplicationsCount} applications recorded`}
+            </p>
+          </div>
+
+          {/* 3. Skill Gap Analyses */}
+          <div
+            onClick={() => onNavigate('skill-gap')}
+            className="p-4 rounded-xl bg-[#131826]/70 border border-[#1e2638] hover:border-violet-500/50 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider">Skill Gap Audits</span>
+              <Target className="w-4 h-4 text-violet-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-white font-mono">
+                {engagement.skillGapsCount}
+              </span>
+              <span className="text-[11px] text-violet-400 font-semibold group-hover:underline flex items-center gap-0.5">
+                Evaluate <ChevronRight className="w-2.5 h-2.5" />
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {engagement.skillGapsCount === 0
+                ? 'No audits recorded'
+                : `${engagement.skillGapsCount} career role comparisons`}
+            </p>
+          </div>
+
+          {/* 4. Mock Interviews */}
+          <div
+            onClick={() => onNavigate('mock-interviews')}
+            className="p-4 rounded-xl bg-[#131826]/70 border border-[#1e2638] hover:border-amber-500/50 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider">Mock Interviews</span>
+              <Mic className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-white font-mono">
+                {engagement.mockInterviewsCount}
+              </span>
+              <span className="text-[11px] text-amber-400 font-semibold group-hover:underline flex items-center gap-0.5">
+                Practice <ChevronRight className="w-2.5 h-2.5" />
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {engagement.mockInterviewsCount === 0
+                ? 'No simulations completed'
+                : `${engagement.mockInterviewsCount} live interview rounds`}
+            </p>
+          </div>
+        </div>
+
+        {/* Activity Velocity Chart & Recent Activity Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2">
+          {/* Left: 7-Day Velocity Chart */}
+          <div className="lg:col-span-7 p-4 rounded-xl bg-[#131826]/50 border border-[#1e2638] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                  7-Day Feature Activity Velocity
+                </span>
+                <span className="text-[11px] font-mono text-slate-400">
+                  Total Actions: <strong className="text-cyan-300 font-bold">{engagement.totalActions}</strong>
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-4">
+                Daily frequency of resume checks, job additions, and AI evaluations.
+              </p>
+            </div>
+
+            {/* Bars */}
+            <div className="flex items-end justify-between gap-2 pt-2 px-1 h-36 border-b border-[#1e2638]">
+              {engagement.weeklyActivity.map((day, idx) => {
+                const maxCount = Math.max(1, ...engagement.weeklyActivity.map((d) => d.count));
+                const heightPercent = day.count > 0 ? Math.max(18, Math.round((day.count / maxCount) * 100)) : 6;
+                const isToday = idx === engagement.weeklyActivity.length - 1;
+
+                return (
+                  <div key={day.date} className="flex-1 flex flex-col items-center gap-1.5 group h-full justify-end">
+                    <span
+                      className={`text-[10px] font-mono transition-opacity ${
+                        day.count > 0 ? 'text-cyan-300 font-bold opacity-100' : 'text-slate-600 opacity-0 group-hover:opacity-100'
+                      }`}
+                    >
+                      {day.count}
+                    </span>
+                    <div className="w-full max-w-[28px] h-24 flex items-end">
+                      <div
+                        style={{ height: `${heightPercent}%` }}
+                        className={`w-full rounded-t-md transition-all duration-300 ${
+                          day.count > 0
+                            ? 'bg-gradient-to-t from-violet-600 to-cyan-400 shadow-md shadow-cyan-500/20'
+                            : 'bg-slate-800/60 group-hover:bg-slate-700/60'
+                        }`}
+                      />
+                    </div>
+                    <span
+                      className={`text-[10px] font-mono uppercase pb-1 ${
+                        isToday ? 'text-cyan-400 font-bold' : 'text-slate-400'
+                      }`}
+                    >
+                      {day.dayLabel}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 text-[11px] text-slate-500">
+              <span className="font-mono">
+                Table: <span className="text-slate-400">public.feature_usage_logs</span>
+              </span>
+              <span className="font-mono">
+                User: <span className="text-slate-400">{currentUser.id.slice(0, 8)}...</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Right: Recent Activity Log Feed */}
+          <div className="lg:col-span-5 p-4 rounded-xl bg-[#131826]/50 border border-[#1e2638] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                  Recent Activity Stream
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  Live Audit
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Live chronological audit of your career preparation steps.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 overflow-y-auto max-h-[170px] pr-1">
+              {engagement.recentLogs && engagement.recentLogs.length > 0 ? (
+                engagement.recentLogs.slice(0, 4).map((log) => {
+                  const logDate = new Date(log.createdAt);
+                  const formattedTime = !isNaN(logDate.getTime())
+                    ? logDate.toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'Recent';
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="p-2.5 rounded-lg bg-[#0e121b] border border-[#1e2638] flex items-start gap-2.5 text-xs"
+                    >
+                      <div className="mt-0.5 p-1 rounded-md bg-violet-950/60 border border-violet-800 text-cyan-400 shrink-0">
+                        {log.featureName === 'resume_analysis' && <FileText className="w-3.5 h-3.5" />}
+                        {log.featureName === 'job_application' && <Briefcase className="w-3.5 h-3.5" />}
+                        {log.featureName === 'skill_gap_analysis' && <Target className="w-3.5 h-3.5" />}
+                        {log.featureName === 'mock_interview' && <Mic className="w-3.5 h-3.5" />}
+                        {log.featureName === 'cover_letter' && <Mail className="w-3.5 h-3.5" />}
+                        {!['resume_analysis', 'job_application', 'skill_gap_analysis', 'mock_interview', 'cover_letter'].includes(
+                          log.featureName
+                        ) && <Activity className="w-3.5 h-3.5" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-semibold text-white capitalize text-[11px] truncate">
+                            {log.featureName.replace(/_/g, ' ')}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono shrink-0">
+                            {formattedTime}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                          {log.actionDescription || 'Completed action'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-4 rounded-lg bg-[#0e121b] border border-dashed border-[#1e2638] text-center space-y-1">
+                  <Activity className="w-5 h-5 text-slate-600 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-300">No Feature Activity Yet</p>
+                  <p className="text-[11px] text-slate-500">
+                    Run a Resume ATS Analysis or track an application to begin logging activity.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 text-right">
+              <span className="text-[10px] text-slate-500 font-mono">
+                Persistent across devices via Supabase
+              </span>
+            </div>
           </div>
         </div>
       </div>

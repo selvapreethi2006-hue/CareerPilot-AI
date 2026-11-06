@@ -505,3 +505,36 @@ export interface MentorChatMessage {
   recommendedTool?: string;
 }
 
+// -------------------------------------------------------------
+// 8. Feature Usage Tracking & Engagement Visualization Types
+// -------------------------------------------------------------
+export type FeatureUsageType =
+  | 'resume_analysis'
+  | 'job_application'
+  | 'skill_gap_analysis'
+  | 'mock_interview'
+  | 'cover_letter'
+  | 'job_match'
+  | 'roadmap_task';
+
+export interface FeatureUsageLog {
+  id: string;
+  userId: string;
+  featureName: FeatureUsageType;
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+export interface EngagementSummary {
+  totalActions: number;
+  resumeAnalysesCount: number;
+  jobApplicationsCount: number;
+  skillGapsCount: number;
+  mockInterviewsCount: number;
+  coverLettersCount: number;
+  engagementTier: 'Novice Explorer' | 'Steady Jobseeker' | 'Proactive Job Hunter' | 'Elite Candidate';
+  weeklyActivity: Array<{ date: string; dayLabel: string; count: number }>;
+  recentLogs: FeatureUsageLog[];
+}
+
+

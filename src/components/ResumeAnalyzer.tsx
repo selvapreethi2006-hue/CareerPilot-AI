@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { ResumeAnalysisResult, UserProfile } from '../types';
 import { SAMPLE_RESUME_TEXT, storage } from '../lib/storage';
-import { saveResumeAuditToCloud, uploadResumeFileToStorage } from '../lib/supabase';
+import { saveResumeAuditToCloud, uploadResumeFileToStorage, logFeatureUsageToCloud } from '../lib/supabase';
 
 interface ResumeAnalyzerProps {
   currentUser: UserProfile;
@@ -200,6 +200,11 @@ export const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({
 
       // Save to Supabase DB cloud persistence
       saveResumeAuditToCloud(currentUser.id, enrichedResult);
+
+      // Track feature usage in Supabase public.feature_usage_logs
+      storage.addUsageLog('resume_analysis', { atsScore: enrichedResult.atsScore, fileName: uploadedFileName || 'Direct Text' }, currentUser.id);
+      logFeatureUsageToCloud(currentUser.id, 'resume_analysis', { atsScore: enrichedResult.atsScore, fileName: uploadedFileName || 'Direct Text' });
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err: unknown) {
