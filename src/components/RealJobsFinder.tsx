@@ -352,11 +352,11 @@ export const RealJobsFinder: React.FC<RealJobsFinderProps> = ({
             </h1>
             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 text-[10px] font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Auto-Sync: Every 6h
+              Auto-Sync: Daily (Vercel Cron)
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Real vacancies automatically synchronized every 6 hours from Remotive, matched to your resume and optimized for freshers & global applicants.
+            Real vacancies synchronized daily from Remotive, matched to your resume and optimized for freshers & global applicants.
           </p>
         </div>
 
@@ -598,7 +598,7 @@ export const RealJobsFinder: React.FC<RealJobsFinderProps> = ({
           <div>
             <h3 className="text-base font-semibold text-white">No Matching Remote Jobs Found</h3>
             <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-              We couldn't find any vacancies matching your current filter criteria. Our automated scheduler checks Remotive every 6 hours for fresh openings.
+              We couldn't find any vacancies matching your current filter criteria. Our automated scheduler checks Remotive daily for fresh openings. You can also click Refresh Jobs anytime.
             </p>
           </div>
           <button

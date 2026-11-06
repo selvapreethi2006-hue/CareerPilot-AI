@@ -857,10 +857,11 @@ Return a structured JSON object strictly matching this schema:
 app.use('/api/gemini', createCareerRoutes(generateWithGemini));
 
 // ---------------------------------------------------------------------------
-// AUTOMATIC JOB OPENING SYNC ENGINE (6-Hour Automated Cron & Safe Persistence)
+// AUTOMATIC JOB OPENING SYNC ENGINE (Daily Vercel Cron & Safe Persistence)
 // ---------------------------------------------------------------------------
 const JOBS_CACHE_FILE = path.join(__dirname, '.jobs_store.json');
-const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 hours (Vercel Hobby plan daily cron cadence)
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // Fallback cadence for persistent Node runtimes
 const MANUAL_REFRESH_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes cooldown for manual UI button
 
 interface StoredJob {
@@ -1131,7 +1132,7 @@ async function performJobSync(triggerSource = 'scheduled-timer'): Promise<{
       totalJobs: activeJobs.length,
       fresherCount,
       indiaCount,
-      nextScheduledSync: new Date(now + SIX_HOURS_MS).toISOString(),
+      nextScheduledSync: new Date(now + ONE_DAY_MS).toISOString(),
       jobs: activeJobs,
     };
 
@@ -1167,20 +1168,29 @@ async function performJobSync(triggerSource = 'scheduled-timer'): Promise<{
   }
 }
 
-// Background Cron Timer (Every 6 Hours on Node process)
+// ---------------------------------------------------------------------------
+// SERVERLESS RUNTIME CLARIFICATION & IN-PROCESS TIMER FALLBACK:
+// In Vercel serverless environments (AWS Lambda), execution containers pause or
+// freeze immediately after responding to an HTTP request; setInterval() does NOT
+// keep ticking in the background when the function is idle.
+// Scheduled execution on Vercel is guaranteed strictly by Vercel Cron invoking
+// the /api/jobs/sync endpoint on the Hobby plan schedule ("0 0 * * *" - once daily).
+// The in-process timer below serves solely as an opportunistic fallback for persistent,
+// long-running Node.js processes (e.g. self-hosted containers, Docker, Cloud Run).
+// ---------------------------------------------------------------------------
 setInterval(async () => {
-  await performJobSync('scheduled-background-timer-6h');
-}, SIX_HOURS_MS);
+  await performJobSync('persistent-process-timer-fallback');
+}, ONE_DAY_MS);
 
 // Initial bootstrap check on server startup:
 setTimeout(() => {
   const needsInitialSync =
     jobsStore.jobs.length === 0 ||
     !jobsStore.lastSuccessfulSync ||
-    (Date.now() - new Date(jobsStore.lastSuccessfulSync).getTime()) > SIX_HOURS_MS;
+    (Date.now() - new Date(jobsStore.lastSuccessfulSync).getTime()) > ONE_DAY_MS;
 
   if (needsInitialSync) {
-    console.log('[JobSync] Initial job store is empty or older than 6 hours. Running bootstrap sync...');
+    console.log('[JobSync] Initial job store is empty or older than 24 hours. Running bootstrap sync...');
     performJobSync('server-startup-bootstrap');
   }
 }, 4000);
@@ -1256,7 +1266,7 @@ app.get('/api/jobs/remotive', async (req, res) => {
       nextScheduledSync: jobsStore.nextScheduledSync,
       syncStatus: jobsStore.syncStatus,
       lastError: jobsStore.lastError,
-      notice: 'Real remote job listings synchronized automatically every 6 hours from Remotive API (24h verified delay).',
+      notice: 'Real remote job listings synchronized automatically via daily Vercel Cron (0 0 * * *) and on-demand refresh from Remotive API (24h verified delay).',
     });
   } catch (err: any) {
     console.error('Error serving jobs:', err);
@@ -1271,7 +1281,7 @@ app.get('/api/jobs/remotive', async (req, res) => {
 });
 
 // API Route: Scheduled Cron Sync Endpoint (Vercel Cron & External Schedulers)
-// Configured in vercel.json: { "path": "/api/jobs/sync", "schedule": "0 */6 * * *" }
+// Configured in vercel.json: { "path": "/api/jobs/sync", "schedule": "0 0 * * *" } (Daily at 00:00 UTC)
 app.all(['/api/jobs/sync', '/api/cron/jobs'], async (req, res) => {
   try {
     // Optional Vercel Cron Secret Verification
@@ -1286,7 +1296,7 @@ app.all(['/api/jobs/sync', '/api/cron/jobs'], async (req, res) => {
     return res.json({
       success: result.success,
       trigger: 'vercel-cron',
-      schedule: 'Every 6 hours (0 */6 * * *)',
+      schedule: 'Daily at 00:00 UTC (0 0 * * *) — Vercel Hobby Plan Compatible',
       syncedCount: result.syncedCount,
       totalActive: result.totalActive,
       newJobsCount: result.newJobsCount,
@@ -1348,7 +1358,7 @@ app.get('/api/jobs/status', (req, res) => {
   return res.json({
     appName: 'CareerPilot AI',
     feature: 'Automated Job Opening Updates',
-    schedule: 'Every 6 hours (0 */6 * * *)',
+    schedule: 'Daily at 00:00 UTC (0 0 * * *) — Vercel Hobby Plan Compatible',
     provider: 'Remotive Public API (24h verified delay)',
     lastSuccessfulSync: jobsStore.lastSuccessfulSync,
     lastAttemptedSync: jobsStore.lastAttemptedSync,

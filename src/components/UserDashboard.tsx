@@ -524,7 +524,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 Remote Jobs
               </h3>
               <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                Real vacancies synchronized from Remotive every 6 hours with fresher filters.
+                Real vacancies synchronized from Remotive with fresher filters and daily auto-updates.
               </p>
             </div>
             <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">

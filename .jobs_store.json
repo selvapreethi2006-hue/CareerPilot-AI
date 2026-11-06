@@ -1,12 +1,12 @@
 {
-  "lastSuccessfulSync": "2026-11-06T14:55:30.767Z",
-  "lastAttemptedSync": "2026-11-06T14:55:30.767Z",
+  "lastSuccessfulSync": "2026-11-06T15:49:52.848Z",
+  "lastAttemptedSync": "2026-11-06T15:49:52.848Z",
   "syncStatus": "healthy",
   "lastError": null,
   "totalJobs": 12,
   "fresherCount": 1,
   "indiaCount": 9,
-  "nextScheduledSync": "2026-11-06T20:55:30.767Z",
+  "nextScheduledSync": "2026-11-07T15:49:52.847Z",
   "jobs": [
     {
       "id": 1185979,
@@ -28,7 +28,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2091166,
@@ -53,7 +53,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": false,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 1749306,
@@ -84,7 +84,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2091165,
@@ -132,7 +132,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2091135,
@@ -199,7 +199,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": false,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2091134,
@@ -224,7 +224,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2091161,
@@ -248,7 +248,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2091158,
@@ -284,7 +284,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2069746,
@@ -329,7 +329,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": false,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 1680495,
@@ -369,7 +369,7 @@
       "isFresherFriendly": true,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2086540,
@@ -394,7 +394,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     },
     {
       "id": 2091045,
@@ -427,7 +427,7 @@
       "isFresherFriendly": false,
       "isIndiaEligible": true,
       "firstSeenAt": "2026-11-06T14:55:22.328Z",
-      "lastVerifiedAt": "2026-11-06T14:55:30.767Z"
+      "lastVerifiedAt": "2026-11-06T15:49:52.848Z"
     }
   ]
 }
