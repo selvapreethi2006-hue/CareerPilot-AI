@@ -650,3 +650,200 @@ export async function verifyProjectEmailConfirmationSettings(): Promise<{
     details: 'Standard Supabase default: email confirmation enforced.',
   };
 }
+
+// ---------------------------------------------------------------------------
+// Per-User Secure Supabase Database CRUD Operations
+// ---------------------------------------------------------------------------
+
+export async function fetchUserApplicationsFromCloud(userId: string): Promise<any[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('job_applications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Error fetching user applications from Supabase:', error.message);
+      return [];
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      companyName: row.company_name,
+      jobTitle: row.job_title,
+      location: row.location || 'Remote',
+      salaryRange: row.salary_range || undefined,
+      applicationDate: row.application_date,
+      status: row.status,
+      interviewDate: row.interview_date || undefined,
+      notes: row.notes || '',
+      matchScore: row.match_score || undefined,
+      jobUrl: row.job_url || undefined,
+      contactPerson: row.contact_person || undefined,
+    }));
+  } catch (err) {
+    console.warn('Network error loading applications:', err);
+    return [];
+  }
+}
+
+export async function saveApplicationToCloud(
+  userId: string,
+  app: any
+): Promise<{ success: boolean; id?: string }> {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId) return { success: false };
+
+  try {
+    const payload: any = {
+      user_id: userId,
+      company_name: app.companyName,
+      job_title: app.jobTitle,
+      location: app.location || 'Remote',
+      salary_range: app.salaryRange || null,
+      application_date: app.applicationDate || new Date().toISOString().split('T')[0],
+      status: app.status || 'applied',
+      interview_date: app.interviewDate || null,
+      notes: app.notes || '',
+      job_url: app.jobUrl || null,
+      match_score: app.matchScore || null,
+    };
+
+    if (app.id && !app.id.startsWith('app-')) {
+      payload.id = app.id;
+    }
+
+    const { data, error } = await supabase
+      .from('job_applications')
+      .upsert(payload)
+      .select('id')
+      .single();
+
+    if (error) {
+      console.warn('Error saving application to Supabase:', error.message);
+      return { success: false };
+    }
+
+    return { success: true, id: data?.id };
+  } catch (err) {
+    console.warn('Failed syncing application to Supabase:', err);
+    return { success: false };
+  }
+}
+
+export async function deleteApplicationFromCloud(userId: string, appId: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId || !appId) return false;
+
+  try {
+    const { error } = await supabase
+      .from('job_applications')
+      .delete()
+      .eq('id', appId)
+      .eq('user_id', userId);
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function uploadResumeFileToStorage(
+  userId: string,
+  file: File | Blob,
+  fileName: string
+): Promise<{ success: boolean; filePath?: string; error?: string }> {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId) {
+    return { success: false, error: 'Supabase client is not configured or user is not logged in.' };
+  }
+
+  try {
+    const cleanName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `${userId}/${Date.now()}_${cleanName}`;
+
+    const { data, error } = await supabase.storage.from('resumes').upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: (file as any).type || (cleanName.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream'),
+    });
+
+    if (error) {
+      console.warn('Supabase storage upload error:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, filePath: data?.path || filePath };
+  } catch (err: any) {
+    console.warn('Storage upload exception:', err);
+    return { success: false, error: err.message || 'Storage upload failed.' };
+  }
+}
+
+export async function saveResumeAuditToCloud(userId: string, audit: any): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId || !audit) return false;
+
+  try {
+    const insertPayload: any = {
+      user_id: userId,
+      target_role: audit.targetRoleDetected || 'Software Engineer',
+      ats_score: audit.atsScore || 0,
+      raw_text: audit.rawResumeText || '',
+      analysis: audit,
+      strengths: audit.strengths || [],
+      weaknesses: audit.weaknesses || [],
+      action_verbs_count: audit.actionVerbsCount || 0,
+      action_verbs_suggestions: audit.actionVerbsSuggestions || [],
+      bullet_point_improvements: audit.bulletPointImprovements || [],
+      recommended_certifications: audit.recommendedCertifications || [],
+      summary_review: audit.summaryReview || '',
+    };
+
+    if (audit.fileName) {
+      insertPayload.file_name = audit.fileName;
+    }
+    if (audit.fileSize) {
+      insertPayload.file_size = audit.fileSize;
+    }
+    if (audit.storageFilePath) {
+      insertPayload.storage_path = audit.storageFilePath;
+    }
+
+    const { error } = await supabase.from('resumes').insert(insertPayload);
+
+    if (error) {
+      // If table doesn't have the optional file columns, retry without them
+      if (error.message && (error.message.includes('column') || error.message.includes('schema'))) {
+        const fallbackPayload = {
+          user_id: userId,
+          target_role: audit.targetRoleDetected || 'Software Engineer',
+          ats_score: audit.atsScore || 0,
+          raw_text: audit.rawResumeText || '',
+          analysis: audit,
+          strengths: audit.strengths || [],
+          weaknesses: audit.weaknesses || [],
+          action_verbs_count: audit.actionVerbsCount || 0,
+          action_verbs_suggestions: audit.actionVerbsSuggestions || [],
+          bullet_point_improvements: audit.bulletPointImprovements || [],
+          recommended_certifications: audit.recommendedCertifications || [],
+          summary_review: audit.summaryReview || '',
+        };
+        const retry = await supabase.from('resumes').insert(fallbackPayload);
+        return !retry.error;
+      }
+      console.warn('Error syncing resume audit to Supabase:', error.message);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Error syncing resume audit to Supabase:', err);
+    return false;
+  }
+}
+

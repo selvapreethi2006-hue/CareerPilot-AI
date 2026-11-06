@@ -87,7 +87,7 @@ export const CoverLetterGenerator: React.FC<CoverLetterGeneratorProps> = ({
 
       setResult(enriched);
       setEditableLetter(enriched.coverLetterText);
-      storage.saveCoverLetter(enriched);
+      storage.saveCoverLetter(enriched, currentUser.id);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: unknown) {

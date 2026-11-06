@@ -99,8 +99,8 @@ export const UserProfileComponent: React.FC<UserProfileProps> = ({
   };
 
   const handleResetData = () => {
-    if (confirm('This will reset your local storage data to the pre-seeded demo state. Are you sure?')) {
-      storage.resetAllData();
+    if (confirm('Clear local browser cache for your account? Your Supabase cloud records will remain intact.')) {
+      storage.clearUserData(currentUser.id);
       window.location.reload();
     }
   };
@@ -373,10 +373,10 @@ export const UserProfileComponent: React.FC<UserProfileProps> = ({
           <button
             type="button"
             onClick={handleResetData}
-            className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 font-medium"
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 font-medium"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Reset Local Demo Data
+            Clear Local Cache
           </button>
 
           <button

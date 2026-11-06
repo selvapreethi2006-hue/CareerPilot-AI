@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, JobApplication } from './types';
-import { storage, DEMO_USERS } from './lib/storage';
+import { storage } from './lib/storage';
 import { Navigation } from './components/Navigation';
 import { LandingPage } from './components/LandingPage';
 import { UserDashboard } from './components/UserDashboard';
 import { ResumeAnalyzer } from './components/ResumeAnalyzer';
 import { JobMatcher } from './components/JobMatcher';
 import { CoverLetterGenerator } from './components/CoverLetterGenerator';
+import { RealJobsFinder } from './components/RealJobsFinder';
 import { ApplicationTracker } from './components/ApplicationTracker';
 import { PricingPage } from './components/PricingPage';
 import { UserProfileComponent } from './components/UserProfile';
@@ -15,39 +16,57 @@ import { AuthModal } from './components/AuthModal';
 import { SupabaseModal } from './components/SupabaseModal';
 import { InterviewPrepModal } from './components/InterviewPrepModal';
 import { EmailVerificationGate } from './components/EmailVerificationGate';
+import { SkillGapAnalyzer } from './components/SkillGapAnalyzer';
+import { MockInterviewPlatform } from './components/MockInterviewPlatform';
+import { LearningRoadmap } from './components/LearningRoadmap';
+import { JobApplicationAssistant } from './components/JobApplicationAssistant';
+import { PortfolioBuilder } from './components/PortfolioBuilder';
+import { SalaryInsights } from './components/SalaryInsights';
+import { CareerMentor } from './components/CareerMentor';
 import {
   fetchCurrentSupabaseUser,
   signOutFromSupabase,
   getSupabaseClient,
+  saveApplicationToCloud,
 } from './lib/supabase';
+import { Lock, Sparkles, UserPlus, LogIn } from 'lucide-react';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<string>('landing');
-  const [currentUser, setCurrentUser] = useState<UserProfile>(storage.getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(storage.getCurrentUser());
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
 
   // Cross-tool data transfer states
-  const [sharedResumeText, setSharedResumeText] = useState<string>(storage.getMasterResumeText());
+  const [sharedResumeText, setSharedResumeText] = useState<string>('');
   const [sharedJobDesc, setSharedJobDesc] = useState<string>('');
   const [sharedCompany, setSharedCompany] = useState<string>('');
   const [sharedTitle, setSharedTitle] = useState<string>('');
+  const [sharedRole, setSharedRole] = useState<string>('');
+  const [sharedSkills, setSharedSkills] = useState<string[]>([]);
 
   // Modals
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
   const [isSupabaseOpen, setIsSupabaseOpen] = useState(false);
   const [activePrepApp, setActivePrepApp] = useState<JobApplication | null>(null);
 
   // Sync Supabase authentication on mount and subscribe to auth lifecycle events
   useEffect(() => {
     // 1. Initial session verification
-    fetchCurrentSupabaseUser().then(({ user }) => {
-      if (user) {
-        storage.setCurrentUser(user);
-        setCurrentUser(user);
-      } else {
-        const stored = storage.getCurrentUser();
-        setCurrentUser(stored);
-      }
-    });
+    fetchCurrentSupabaseUser()
+      .then(({ user }) => {
+        if (user) {
+          storage.setCurrentUser(user);
+          setCurrentUser(user);
+          setSharedResumeText(storage.getMasterResumeText(user.id));
+        } else {
+          storage.setCurrentUser(null);
+          setCurrentUser(null);
+        }
+      })
+      .finally(() => {
+        setAuthLoading(false);
+      });
 
     // 2. Real-time auth subscription
     const supabase = getSupabaseClient();
@@ -61,17 +80,12 @@ export default function App() {
             if (user) {
               storage.setCurrentUser(user);
               setCurrentUser(user);
+              setSharedResumeText(storage.getMasterResumeText(user.id));
             }
           }
         } else if (event === 'SIGNED_OUT') {
-          const defaultUser: UserProfile = {
-            ...DEMO_USERS[0],
-            isDemo: true,
-            isSupabaseUser: false,
-            isEmailVerified: true,
-          };
-          storage.setCurrentUser(defaultUser);
-          setCurrentUser(defaultUser);
+          storage.setCurrentUser(null);
+          setCurrentUser(null);
           setCurrentPage('landing');
         }
       });
@@ -83,30 +97,30 @@ export default function App() {
   }, []);
 
   const handleNavigate = (page: string) => {
-    // If user is a Supabase user with an unconfirmed email, redirect to dashboard trigger verification gate
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenAuth = (mode: 'signin' | 'signup' = 'signin') => {
+    setAuthModalMode(mode);
+    setIsAuthOpen(true);
   };
 
   const handleSelectUser = (user: UserProfile) => {
     storage.setCurrentUser(user);
     setCurrentUser(user);
-    if (user.isSupabaseUser && !user.isEmailVerified) {
-      // Direct unverified user to dashboard where the verification gate will engage
+    setSharedResumeText(storage.getMasterResumeText(user.id));
+    if (!user.isEmailVerified) {
+      setCurrentPage('dashboard');
+    } else if (currentPage === 'landing') {
       setCurrentPage('dashboard');
     }
   };
 
   const handleSignOut = async () => {
     await signOutFromSupabase();
-    const defaultUser: UserProfile = {
-      ...DEMO_USERS[0],
-      isDemo: true,
-      isSupabaseUser: false,
-      isEmailVerified: true,
-    };
-    storage.setCurrentUser(defaultUser);
-    setCurrentUser(defaultUser);
+    storage.setCurrentUser(null);
+    setCurrentUser(null);
     setCurrentPage('landing');
   };
 
@@ -115,6 +129,7 @@ export default function App() {
     if (user) {
       storage.setCurrentUser(user);
       setCurrentUser(user);
+      setSharedResumeText(storage.getMasterResumeText(user.id));
     }
   };
 
@@ -139,15 +154,18 @@ export default function App() {
   };
 
   const handleAddApplicationToTracker = (appData: Omit<JobApplication, 'id'>) => {
-    storage.addApplication(appData);
+    const created = storage.addApplication(appData, currentUser?.id);
+    if (currentUser?.id) {
+      saveApplicationToCloud(currentUser.id, created);
+    }
     setCurrentPage('tracker');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Check if unconfirmed Supabase user is trying to access protected workspace views
-  const isUnconfirmedSupabaseUser = currentUser.isSupabaseUser && !currentUser.isEmailVerified;
+  // Protected route checking
   const isProtectedWorkspacePage =
-    currentPage !== 'landing' && currentPage !== 'pricing';
+    currentPage !== 'landing' && currentPage !== 'pricing' && currentPage !== 'jobs';
+  const isUnconfirmedUser = currentUser && !currentUser.isEmailVerified;
 
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans selection:bg-violet-600/30 selection:text-cyan-300">
@@ -156,15 +174,51 @@ export default function App() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         currentUser={currentUser}
-        onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenAuth={handleOpenAuth}
         onOpenSupabaseModal={() => setIsSupabaseOpen(true)}
         onSignOut={handleSignOut}
       />
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {/* Strict Email Verification Gate for Unverified Users */}
-        {isUnconfirmedSupabaseUser && isProtectedWorkspacePage ? (
+        {authLoading ? (
+          <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-4">
+            <div className="w-10 h-10 rounded-full border-2 border-violet-500/20 border-t-cyan-400 animate-spin" />
+            <p className="text-xs text-slate-400 font-mono">Verifying user session...</p>
+          </div>
+        ) : isProtectedWorkspacePage && !currentUser ? (
+          /* Route Protection: Unauthenticated Users */
+          <div className="max-w-md mx-auto my-16 px-4">
+            <div className="p-8 rounded-2xl bg-[#0e121b] border border-[#1e2638] text-center space-y-5 shadow-2xl">
+              <div className="w-14 h-14 rounded-2xl bg-violet-950/80 border border-violet-800/60 flex items-center justify-center text-cyan-400 mx-auto">
+                <Lock className="w-7 h-7" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white tracking-tight">Sign In Required</h2>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  CareerPilot AI workspace tools require a free account. Please sign in or register to securely save and access your resumes, ATS scores, and application tracking pipeline.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2.5 pt-2">
+                <button
+                  onClick={() => handleOpenAuth('signin')}
+                  className="w-full py-2.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 shadow-md shadow-violet-900/30 flex items-center justify-center gap-2 transition-all"
+                >
+                  <LogIn className="w-4 h-4 text-cyan-200" />
+                  Sign In to Continue
+                </button>
+                <button
+                  onClick={() => handleOpenAuth('signup')}
+                  className="w-full py-2.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-[#131826] border border-[#1e2638] hover:border-slate-600 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <UserPlus className="w-4 h-4 text-violet-400" />
+                  Create Free Account
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : isProtectedWorkspacePage && isUnconfirmedUser ? (
+          /* Email Verification Gate for Unverified Users */
           <EmailVerificationGate
             email={currentUser.email}
             onVerified={handleEmailConfirmed}
@@ -172,15 +226,16 @@ export default function App() {
             onOpenSupabaseModal={() => setIsSupabaseOpen(true)}
           />
         ) : (
+          /* Main Pages */
           <>
             {currentPage === 'landing' && (
               <LandingPage
                 onNavigate={handleNavigate}
-                onOpenAuth={() => setIsAuthOpen(true)}
+                onOpenAuth={() => handleOpenAuth('signup')}
               />
             )}
 
-            {currentPage === 'dashboard' && (
+            {currentPage === 'dashboard' && currentUser && (
               <UserDashboard
                 currentUser={currentUser}
                 onNavigate={handleNavigate}
@@ -188,7 +243,7 @@ export default function App() {
               />
             )}
 
-            {currentPage === 'resume-analyzer' && (
+            {currentPage === 'resume-analyzer' && currentUser && (
               <ResumeAnalyzer
                 currentUser={currentUser}
                 onNavigateToJobMatcher={handleNavigateToJobMatcher}
@@ -196,7 +251,7 @@ export default function App() {
               />
             )}
 
-            {currentPage === 'job-matcher' && (
+            {currentPage === 'job-matcher' && currentUser && (
               <JobMatcher
                 currentUser={currentUser}
                 initialResumeText={sharedResumeText}
@@ -205,7 +260,7 @@ export default function App() {
               />
             )}
 
-            {currentPage === 'cover-letter' && (
+            {currentPage === 'cover-letter' && currentUser && (
               <CoverLetterGenerator
                 currentUser={currentUser}
                 initialResumeText={sharedResumeText}
@@ -215,17 +270,136 @@ export default function App() {
               />
             )}
 
-            {currentPage === 'tracker' && <ApplicationTracker />}
+            {currentPage === 'tracker' && currentUser && (
+              <ApplicationTracker currentUser={currentUser} />
+            )}
+
+            {currentPage === 'career-mentor' && currentUser && (
+              <CareerMentor
+                currentUser={currentUser}
+                onNavigateToTool={(toolId) => {
+                  setCurrentPage(toolId);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
+
+            {currentPage === 'skill-gap' && currentUser && (
+              <SkillGapAnalyzer
+                currentUser={currentUser}
+                initialResumeText={sharedResumeText}
+                onNavigateToRoadmap={(role, skills) => {
+                  setSharedRole(role);
+                  setSharedSkills(skills);
+                  setCurrentPage('learning-roadmap');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onNavigateToJobs={(role) => {
+                  setCurrentPage('jobs');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
+
+            {currentPage === 'mock-interviews' && currentUser && (
+              <MockInterviewPlatform
+                currentUser={currentUser}
+                initialRole={sharedRole}
+                onNavigateToRoadmap={() => {
+                  setCurrentPage('learning-roadmap');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
+
+            {currentPage === 'learning-roadmap' && currentUser && (
+              <LearningRoadmap
+                currentUser={currentUser}
+                initialRole={sharedRole}
+                initialSkills={sharedSkills}
+                onNavigateToInterviews={() => {
+                  setCurrentPage('mock-interviews');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
+
+            {currentPage === 'outreach-assistant' && currentUser && (
+              <JobApplicationAssistant
+                currentUser={currentUser}
+                initialCompany={sharedCompany}
+                initialTitle={sharedTitle}
+                onNavigateToTracker={() => {
+                  setCurrentPage('tracker');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
+
+            {currentPage === 'portfolio-builder' && currentUser && (
+              <PortfolioBuilder currentUser={currentUser} />
+            )}
+
+            {currentPage === 'salary-insights' && currentUser && (
+              <SalaryInsights
+                currentUser={currentUser}
+                initialRole={sharedRole}
+                onNavigateToJobs={() => {
+                  setCurrentPage('jobs');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
+
+            {currentPage === 'jobs' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <RealJobsFinder
+                  currentUser={currentUser || {
+                    id: '',
+                    name: 'Guest User',
+                    email: '',
+                    role: 'jobseeker',
+                    plan: 'free',
+                    avatarUrl: '',
+                    headline: '',
+                    universityOrCompany: '',
+                    targetRole: '',
+                    bio: '',
+                    monthlyAnalysisCount: 0,
+                    monthlyAnalysisLimit: 10,
+                    createdAt: '',
+                  }}
+                  onNavigateToJobMatcher={(jobDesc, company, title) => {
+                    setSharedJobDesc(jobDesc);
+                    setSharedCompany(company);
+                    setSharedTitle(title);
+                    setCurrentPage('job-matcher');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  onNavigateToCoverLetter={(jobDesc, company, title) => {
+                    handleNavigateToCoverLetter(sharedResumeText, jobDesc, company, title);
+                  }}
+                  onAddApplicationToTracker={(appData) => {
+                    if (!currentUser) {
+                      handleOpenAuth('signin');
+                      return;
+                    }
+                    handleAddApplicationToTracker(appData);
+                  }}
+                />
+              </div>
+            )}
 
             {currentPage === 'pricing' && (
               <PricingPage
                 currentUser={currentUser}
                 onUserUpdated={(u) => setCurrentUser(u)}
                 onNavigate={handleNavigate}
+                onOpenAuth={handleOpenAuth}
               />
             )}
 
-            {currentPage === 'profile' && (
+            {currentPage === 'profile' && currentUser && (
               <UserProfileComponent
                 currentUser={currentUser}
                 onUserUpdated={(u) => setCurrentUser(u)}
@@ -234,7 +408,9 @@ export default function App() {
               />
             )}
 
-            {currentPage === 'admin' && <AdminDashboard />}
+            {currentPage === 'admin' && currentUser && (
+              <AdminDashboard />
+            )}
           </>
         )}
       </main>
@@ -249,6 +425,7 @@ export default function App() {
           setIsAuthOpen(false);
           setIsSupabaseOpen(true);
         }}
+        initialMode={authModalMode}
       />
 
       <SupabaseModal
@@ -260,7 +437,7 @@ export default function App() {
         <InterviewPrepModal
           application={activePrepApp}
           onClose={() => setActivePrepApp(null)}
-          resumeText={sharedResumeText || storage.getMasterResumeText()}
+          resumeText={sharedResumeText || (currentUser ? storage.getMasterResumeText(currentUser.id) : '')}
         />
       )}
     </div>

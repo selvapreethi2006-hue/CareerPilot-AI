@@ -20,12 +20,13 @@ import {
 import { UserProfile } from '../types';
 
 interface PricingPageProps {
-  currentUser: UserProfile;
-  onUserUpdated: (user: UserProfile) => void;
+  currentUser: UserProfile | null;
+  onUserUpdated?: (user: UserProfile) => void;
   onNavigate?: (page: string) => void;
+  onOpenAuth?: (mode?: 'signin' | 'signup') => void;
 }
 
-export const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onNavigate }) => {
+export const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onNavigate, onOpenAuth }) => {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
       {/* Header */}
@@ -140,32 +141,45 @@ export const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onNavigat
 
             <div className="p-4 rounded-xl bg-[#090b10] border border-[#1e2638] space-y-2.5 text-xs">
               <div className="flex items-center justify-between text-slate-400">
-                <span>Account Name:</span>
-                <span className="font-semibold text-white">{currentUser.name}</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-400">
-                <span>Access Status:</span>
-                <span className="font-mono text-emerald-400 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> 100% Unlocked
+                <span>Account:</span>
+                <span className="font-semibold text-white">
+                  {currentUser ? currentUser.name : 'Guest Visitor'}
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-400">
-                <span>Monthly AI Audits:</span>
+                <span>Status:</span>
+                <span className="font-mono text-emerald-400 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {currentUser ? 'Supabase Verified' : 'Free Public Access'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-400">
+                <span>AI Quota:</span>
                 <span className="font-mono text-cyan-400 font-bold">Unlimited</span>
               </div>
               <div className="flex items-center justify-between text-slate-400">
-                <span>Billing Status:</span>
+                <span>Cost:</span>
                 <span className="font-mono text-slate-300 font-medium">$0.00 / Zero Billing</span>
               </div>
             </div>
 
-            {onNavigate && (
+            {currentUser ? (
+              onNavigate && (
+                <button
+                  onClick={() => onNavigate('resume-analyzer')}
+                  className="w-full py-2.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 transition-all flex items-center justify-center gap-1.5 shadow-md shadow-violet-900/30"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-200" />
+                  Go to Resume Analyzer
+                </button>
+              )
+            ) : (
               <button
-                onClick={() => onNavigate('resume-analyzer')}
-                className="w-full py-2.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 transition-all flex items-center justify-center gap-1.5 shadow-md shadow-violet-900/30"
+                onClick={() => onOpenAuth && onOpenAuth('signup')}
+                className="w-full py-2.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-1.5 shadow-md shadow-violet-900/30"
               >
                 <Sparkles className="w-3.5 h-3.5 text-cyan-200" />
-                Go to Resume Analyzer
+                Sign Up for Free Account
               </button>
             )}
           </div>

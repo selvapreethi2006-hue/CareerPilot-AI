@@ -103,7 +103,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenAuth
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-violet-400" />
-                  <span>Supabase Isolation Architecture</span>
+                  <span>Private & Secure Cloud Vault</span>
                 </div>
               </div>
             </div>
@@ -418,7 +418,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenAuth
               onClick={onOpenAuth}
               className="px-6 py-3 rounded-lg text-sm font-semibold text-slate-200 bg-[#131826] border border-[#1e2638] hover:text-white hover:border-slate-600 transition-colors"
             >
-              Sign In / Select Demo Profile
+              Sign In / Create Account
             </button>
           </div>
         </div>
@@ -435,7 +435,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenAuth
           <div className="flex items-center gap-6">
             <span>Powered by Gemini 3.8 Flash</span>
             <span>·</span>
-            <span>Configurable Supabase Sync</span>
+            <span>Encrypted Cloud Sync</span>
             <span>·</span>
             <span>© 2026 CareerPilot AI</span>
           </div>

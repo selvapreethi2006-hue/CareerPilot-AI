@@ -15,20 +15,58 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { UserProfile } from '../types';
-import { storage } from '../lib/storage';
+import { getSupabaseClient } from '../lib/supabase';
+import { useEffect } from 'react';
 
 export const AdminDashboard: React.FC = () => {
-  const [users, setUsers] = useState<UserProfile[]>(storage.getAllUsers());
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const totalUsers = users.length + 1840; // realistic platform numbers
-  const totalAudits = users.reduce((acc, u) => acc + u.monthlyAnalysisCount, 0) + 14850;
-  const proUsersCount = users.filter((u) => u.plan === 'pro').length + 420;
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      setLoading(true);
+      supabase
+        .from('profiles')
+        .select('*')
+        .then(({ data, error }) => {
+          setLoading(false);
+          if (data && !error) {
+            const mapped: UserProfile[] = data.map((p: any) => ({
+              id: p.id,
+              name: p.full_name || 'Candidate',
+              email: p.email || 'user@supabase.co',
+              role: p.role || 'fresher',
+              plan: p.plan || 'free',
+              avatarUrl: p.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+              headline: p.target_role ? `${p.target_role} | Member` : 'Software Candidate',
+              universityOrCompany: p.university_or_company || 'Independent',
+              targetRole: p.target_role || 'Software Engineer',
+              bio: p.bio || '',
+              monthlyAnalysisCount: p.monthly_analysis_count || 0,
+              monthlyAnalysisLimit: p.monthly_analysis_limit || 9999,
+              createdAt: p.created_at ? p.created_at.split('T')[0] : '2026-01-01',
+              isSupabaseUser: true,
+              isEmailVerified: true,
+            }));
+            setUsers(mapped);
+          }
+        });
+    }
+  }, []);
 
-  const handleTogglePlan = (userId: string) => {
+  const totalUsers = users.length > 0 ? users.length : 1;
+  const totalAudits = users.reduce((acc, u) => acc + u.monthlyAnalysisCount, 0);
+  const proUsersCount = users.filter((u) => u.plan === 'pro').length;
+
+  const handleTogglePlan = async (userId: string) => {
+    const target = users.find((u) => u.id === userId);
+    if (!target) return;
+    const nextPlan = target.plan === 'pro' ? 'free' : 'pro';
+
     const updated = users.map((u) => {
       if (u.id === userId) {
-        const nextPlan = u.plan === 'pro' ? 'free' : 'pro';
         return {
           ...u,
           plan: nextPlan as any,
@@ -38,8 +76,12 @@ export const AdminDashboard: React.FC = () => {
       return u;
     });
     setUsers(updated);
-    storage.saveAllUsers(updated);
-    setToastMsg(`User subscription plan toggled.`);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('profiles').update({ plan: nextPlan }).eq('id', userId);
+    }
+    setToastMsg(`User subscription plan updated to ${nextPlan.toUpperCase()}.`);
     setTimeout(() => setToastMsg(null), 2500);
   };
 

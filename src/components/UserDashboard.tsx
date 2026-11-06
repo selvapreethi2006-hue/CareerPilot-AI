@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Target,
@@ -15,9 +15,24 @@ import {
   ExternalLink,
   ChevronRight,
   Zap,
-  BookOpen
+  BookOpen,
+  Globe2,
+  Mic,
+  DollarSign,
+  Compass,
+  Code2,
+  Send,
+  Layers,
 } from 'lucide-react';
-import { UserProfile, JobApplication, ResumeAnalysisResult } from '../types';
+import {
+  UserProfile,
+  JobApplication,
+  ResumeAnalysisResult,
+  RemotiveJob,
+  SkillGapResult,
+  MockInterviewSession,
+  LearningRoadmapResult,
+} from '../types';
 import { storage } from '../lib/storage';
 
 interface UserDashboardProps {
@@ -31,20 +46,62 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   onNavigate,
   onSelectApplicationForPrep,
 }) => {
-  const applications = storage.getApplications();
-  const savedResumes = storage.getSavedResumes();
+  const applications = storage.getApplications(currentUser.id);
+  const savedResumes = storage.getSavedResumes(currentUser.id);
+  const savedMatches = storage.getSavedMatches(currentUser.id);
+  const savedSkillGaps = storage.getSkillGapAnalyses(currentUser.id);
+  const savedInterviews = storage.getMockInterviewSessions(currentUser.id);
+  const savedRoadmaps = storage.getLearningRoadmaps(currentUser.id);
+
+  const [recommendedJobs, setRecommendedJobs] = useState<RemotiveJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState<boolean>(true);
+
+  // Fetch live synchronized jobs for dashboard preview
+  useEffect(() => {
+    fetch('/api/jobs/remotive?search=' + encodeURIComponent(currentUser.targetRole || 'Developer'))
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.jobs && Array.isArray(data.jobs)) {
+          setRecommendedJobs(data.jobs.slice(0, 3));
+        }
+      })
+      .catch((e) => console.warn('Could not load recommended jobs for dashboard', e))
+      .finally(() => setJobsLoading(false));
+  }, [currentUser.targetRole]);
 
   const activeApps = applications.filter((a) => a.status !== 'rejected');
   const interviews = applications.filter((a) => a.status === 'interviewing');
-  const offers = applications.filter((a) => a.status === 'offered');
-
   const latestResume = savedResumes[0];
-  const atsScore = latestResume?.atsScore || 78;
+  const latestMatch = savedMatches[0];
+  const latestSkillGap = savedSkillGaps[0];
+  const latestRoadmap = savedRoadmaps[0];
+  const latestInterview = savedInterviews[0];
 
-  // Composite Readiness Score
-  const readinessScore = Math.min(
-    98,
-    Math.round(atsScore * 0.5 + (activeApps.length > 0 ? 30 : 10) + (interviews.length > 0 ? 15 : 5))
+  const atsScore = latestResume?.atsScore || 0;
+  const matchScore = latestMatch?.overallMatchScore || 0;
+  const skillGapScore = latestSkillGap?.skillMatchPercentage || 0;
+  const interviewScore = latestInterview?.overallScore || 0;
+
+  // Calculate Roadmap Progress
+  const totalTasks =
+    latestRoadmap?.weeklyModules.reduce((acc, m) => acc + m.dailyTasks.length, 0) || 0;
+  const completedTasks =
+    latestRoadmap?.weeklyModules.reduce(
+      (acc, m) => acc + m.dailyTasks.filter((t) => t.completed).length,
+      0
+    ) || 0;
+  const roadmapPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  // Composite Readiness Index
+  let readinessScore = 20;
+  if (atsScore > 0) readinessScore += Math.round(atsScore * 0.35);
+  if (activeApps.length > 0) readinessScore += Math.min(20, activeApps.length * 5);
+  if (interviewScore > 0) readinessScore += Math.round(interviewScore * 0.15);
+  if (roadmapPct > 0) readinessScore += Math.round(roadmapPct * 0.15);
+  readinessScore = Math.min(98, Math.max(20, readinessScore));
+
+  const upcomingInterviews = applications.filter(
+    (a) => a.status === 'interviewing' || a.interviewDate
   );
 
   return (
@@ -56,7 +113,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
         <div className="flex items-center gap-4 relative z-10">
           <img
-            src={currentUser.avatarUrl}
+            src={
+              currentUser.avatarUrl ||
+              `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                currentUser.name
+              )}`
+            }
             alt={currentUser.name}
             className="w-14 h-14 rounded-xl object-cover border-2 border-violet-500/50 shadow-md"
           />
@@ -66,45 +128,31 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 Welcome back, {currentUser.name}
               </h1>
               <span className="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-800 text-cyan-300">
-                100% FREE PUBLIC ACCESS
+                100% Free Public Edition
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              {currentUser.headline} · {currentUser.universityOrCompany}
+              Target Role: <strong className="text-slate-200">{currentUser.targetRole || 'Software Professional'}</strong> · {currentUser.universityOrCompany || 'Global Candidate'}
             </p>
           </div>
         </div>
 
-        {/* Usage Tracker */}
-        <div className="flex flex-col sm:items-end justify-center relative z-10 p-3 rounded-xl bg-[#090b10]/80 border border-[#1e2638] sm:min-w-[220px]">
-          <div className="flex items-center justify-between w-full text-xs mb-1.5">
-            <span className="text-slate-400">Monthly AI Allowance:</span>
-            <span className="font-mono font-bold text-cyan-400">
-              ∞ Unlimited Free Access
-            </span>
-          </div>
-          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-            <div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400 w-full" />
-          </div>
-          <div className="mt-2 flex items-center justify-between w-full text-[11px]">
-            <span className="text-slate-500 font-mono">
-              {currentUser.monthlyAnalysisCount} audits run
-            </span>
-            <button
-              onClick={() => onNavigate('pricing')}
-              className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold transition-colors"
-            >
-              <Sparkles className="w-3 h-3" />
-              All Features Unlocked
-            </button>
-          </div>
+        {/* Fast Action CTA */}
+        <div className="flex items-center gap-2 relative z-10">
+          <button
+            onClick={() => onNavigate('career-mentor')}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 flex items-center gap-2 transition-all shadow-md shadow-violet-900/30"
+          >
+            <Compass className="w-4 h-4 text-cyan-300" />
+            <span>Ask Career Mentor AI</span>
+          </button>
         </div>
       </div>
 
-      {/* High-Level Metrics & Readiness Score Strip */}
+      {/* Metrics & Readiness Index Ribbon */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Readiness Dial Card */}
-        <div className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638] flex items-center justify-between">
+        {/* Composite Readiness Card */}
+        <div className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] flex items-center justify-between shadow-lg">
           <div>
             <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
               Readiness Index
@@ -114,7 +162,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <span className="text-xs text-cyan-400 font-normal"> / 100</span>
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              {readinessScore > 80 ? 'Highly Competitive' : 'Moderate Alignment'}
+              {readinessScore >= 80 ? 'Highly Competitive' : 'Moderate Alignment'}
             </p>
           </div>
           <div className="relative w-14 h-14 flex items-center justify-center">
@@ -140,301 +188,491 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         </div>
 
-        {/* ATS Score Card */}
+        {/* ATS Resume Score Card */}
         <div
           onClick={() => onNavigate('resume-analyzer')}
-          className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638] hover:border-violet-500/50 transition-colors cursor-pointer group flex flex-col justify-between"
+          className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-slate-700 cursor-pointer transition-all shadow-lg flex items-center justify-between group"
         >
-          <div className="flex items-center justify-between">
+          <div>
             <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
-              Latest ATS Score
+              Resume ATS Score
             </span>
-            <FileText className="w-4 h-4 text-violet-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="my-2">
-            <span className="text-2xl font-extrabold text-white font-mono">
-              {atsScore}
-              <span className="text-xs text-violet-400 font-normal"> / 100</span>
-            </span>
-            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-              {latestResume?.targetRoleDetected || 'Full-Stack Developer'}
+            <div className="text-2xl font-extrabold text-white font-mono mt-1">
+              {atsScore > 0 ? (
+                <>
+                  {atsScore}
+                  <span className="text-xs text-emerald-400 font-normal"> / 100</span>
+                </>
+              ) : (
+                <span className="text-sm font-sans font-medium text-slate-500">Not Audited</span>
+              )}
             </div>
+            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-cyan-400 transition-colors">
+              <span>{savedResumes.length} saved audits</span>
+              <ChevronRight className="w-3 h-3" />
+            </p>
           </div>
-          <div className="text-[11px] text-violet-400 flex items-center gap-1 font-medium">
-            View full analysis <ChevronRight className="w-3 h-3" />
+          <div className="w-11 h-11 rounded-xl bg-violet-950/60 border border-violet-800/60 flex items-center justify-center text-cyan-400">
+            <FileText className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Active Applications Card */}
+        {/* Learning Roadmap Progress Card */}
         <div
-          onClick={() => onNavigate('tracker')}
-          className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638] hover:border-emerald-500/50 transition-colors cursor-pointer group flex flex-col justify-between"
+          onClick={() => onNavigate('learning-roadmap')}
+          className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-slate-700 cursor-pointer transition-all shadow-lg flex items-center justify-between group"
         >
-          <div className="flex items-center justify-between">
+          <div>
             <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
-              Tracked Pipelines
+              Curriculum Progress
             </span>
-            <Briefcase className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="my-2">
-            <span className="text-2xl font-extrabold text-white font-mono">
-              {applications.length}
-            </span>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              {activeApps.length} active in evaluation
+            <div className="text-2xl font-extrabold text-white font-mono mt-1">
+              {latestRoadmap ? (
+                <>
+                  {roadmapPct}%
+                  <span className="text-xs text-cyan-400 font-normal"> done</span>
+                </>
+              ) : (
+                <span className="text-sm font-sans font-medium text-slate-500">Not Started</span>
+              )}
             </div>
+            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-cyan-400 transition-colors">
+              <span>{completedTasks} tasks completed</span>
+              <ChevronRight className="w-3 h-3" />
+            </p>
           </div>
-          <div className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
-            Open Kanban board <ChevronRight className="w-3 h-3" />
+          <div className="w-11 h-11 rounded-xl bg-violet-950/60 border border-violet-800/60 flex items-center justify-center text-cyan-400">
+            <BookOpen className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Upcoming Interviews & Offers */}
+        {/* Mock Interview Score Card */}
         <div
-          onClick={() => onNavigate('tracker')}
-          className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/50 transition-colors cursor-pointer group flex flex-col justify-between"
+          onClick={() => onNavigate('mock-interviews')}
+          className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-slate-700 cursor-pointer transition-all shadow-lg flex items-center justify-between group"
         >
-          <div className="flex items-center justify-between">
+          <div>
             <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
-              Interviews & Offers
+              Interview Evaluation
             </span>
-            <Calendar className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="my-2">
-            <div className="flex items-center gap-3">
-              <div>
-                <span className="text-2xl font-extrabold text-white font-mono">
-                  {interviews.length}
-                </span>
-                <span className="text-xs text-slate-400 ml-1">Interviews</span>
-              </div>
-              <span className="text-slate-600">|</span>
-              <div>
-                <span className="text-2xl font-extrabold text-emerald-400 font-mono">
-                  {offers.length}
-                </span>
-                <span className="text-xs text-slate-400 ml-1">Offer</span>
-              </div>
+            <div className="text-2xl font-extrabold text-white font-mono mt-1">
+              {interviewScore > 0 ? (
+                <>
+                  {interviewScore}%
+                  <span className="text-xs text-cyan-400 font-normal"> avg</span>
+                </>
+              ) : (
+                <span className="text-sm font-sans font-medium text-slate-500">No Sessions</span>
+              )}
             </div>
+            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-cyan-400 transition-colors">
+              <span>{savedInterviews.length} sessions logged</span>
+              <ChevronRight className="w-3 h-3" />
+            </p>
           </div>
-          <div className="text-[11px] text-cyan-400 flex items-center gap-1 font-medium">
-            Launch interview prep <ChevronRight className="w-3 h-3" />
+          <div className="w-11 h-11 rounded-xl bg-violet-950/60 border border-violet-800/60 flex items-center justify-center text-cyan-400">
+            <Mic className="w-5 h-5" />
           </div>
         </div>
       </div>
 
-      {/* Quick Launchpad & Recommended Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Quick Actions */}
-        <div className="lg:col-span-8 space-y-6">
-          <div className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638]">
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+      {/* Career Platform Suite Launchpad (All 12 Modules) */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
               <Zap className="w-4 h-4 text-cyan-400" />
-              Quick Action Launchpad
+              Unified AI Career Suite
             </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                onClick={() => onNavigate('resume-analyzer')}
-                className="flex items-start gap-3.5 p-4 rounded-lg bg-[#090b10] border border-[#1e2638] hover:border-violet-500/60 transition-all text-left group"
-              >
-                <div className="w-9 h-9 rounded-lg bg-violet-950/80 border border-violet-800/40 flex items-center justify-center text-violet-400 shrink-0 group-hover:scale-105">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white group-hover:text-violet-300">
-                    Audit Resume
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Upload or paste resume text for instant ATS scoring and bullet improvements.
-                  </p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => onNavigate('job-matcher')}
-                className="flex items-start gap-3.5 p-4 rounded-lg bg-[#090b10] border border-[#1e2638] hover:border-cyan-500/60 transition-all text-left group"
-              >
-                <div className="w-9 h-9 rounded-lg bg-cyan-950/80 border border-cyan-800/40 flex items-center justify-center text-cyan-400 shrink-0 group-hover:scale-105">
-                  <Target className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white group-hover:text-cyan-300">
-                    Match Job Description
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Paste target JD to check missing keywords and calculate interview odds.
-                  </p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => onNavigate('cover-letter')}
-                className="flex items-start gap-3.5 p-4 rounded-lg bg-[#090b10] border border-[#1e2638] hover:border-indigo-500/60 transition-all text-left group"
-              >
-                <div className="w-9 h-9 rounded-lg bg-indigo-950/80 border border-indigo-800/40 flex items-center justify-center text-indigo-400 shrink-0 group-hover:scale-105">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white group-hover:text-indigo-300">
-                    Generate Cover Letter
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Draft a tailored letter matching company values and your specific stack.
-                  </p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => onNavigate('tracker')}
-                className="flex items-start gap-3.5 p-4 rounded-lg bg-[#090b10] border border-[#1e2638] hover:border-emerald-500/60 transition-all text-left group"
-              >
-                <div className="w-9 h-9 rounded-lg bg-emerald-950/80 border border-emerald-800/40 flex items-center justify-center text-emerald-400 shrink-0 group-hover:scale-105">
-                  <Briefcase className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white group-hover:text-emerald-300">
-                    Log Job Application
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Track statuses, interview dates, salary, and notes in one unified view.
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Tracked Jobs Table */}
-          <div className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-emerald-400" />
-                Recent Applications
-              </h2>
-              <button
-                onClick={() => onNavigate('tracker')}
-                className="text-xs text-cyan-400 hover:underline font-medium"
-              >
-                View all ({applications.length})
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-[#1e2638] text-slate-400">
-                    <th className="pb-2.5 font-medium">Company & Role</th>
-                    <th className="pb-2.5 font-medium">Applied</th>
-                    <th className="pb-2.5 font-medium">Status</th>
-                    <th className="pb-2.5 font-medium text-right">Interview Prep</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1e2638]/50">
-                  {applications.slice(0, 4).map((app) => (
-                    <tr key={app.id} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-3">
-                        <div className="font-semibold text-white">{app.companyName}</div>
-                        <div className="text-[11px] text-slate-400">{app.jobTitle}</div>
-                      </td>
-                      <td className="py-3 font-mono text-slate-400">{app.applicationDate}</td>
-                      <td className="py-3">
-                        <span
-                          className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full ${
-                            app.status === 'offered'
-                              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
-                              : app.status === 'interviewing'
-                              ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-800'
-                              : app.status === 'screening'
-                              ? 'bg-violet-950/80 text-violet-300 border border-violet-800'
-                              : 'bg-slate-900 text-slate-300 border border-slate-700'
-                          }`}
-                        >
-                          {app.status}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <button
-                          onClick={() => onSelectApplicationForPrep(app)}
-                          className="px-2.5 py-1 text-[11px] font-medium rounded bg-[#090b10] border border-[#1e2638] text-cyan-300 hover:border-cyan-500 hover:text-white transition-colors"
-                        >
-                          Prep Q&A
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <p className="text-xs text-slate-400">
+              Access every intelligent career development service tailored to your profile.
+            </p>
           </div>
         </div>
 
-        {/* Right: Weekly Tactical Checklist & Saved Resumes */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Tactical Checklist */}
-          <div className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638]">
-            <h2 className="text-xs font-semibold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-              Weekly Career Checklist
-            </h2>
-            <div className="space-y-2.5 text-xs">
-              <div className="p-2.5 rounded-lg bg-[#090b10] border border-[#1e2638] flex items-start gap-2">
-                <input type="checkbox" defaultChecked className="mt-0.5 rounded text-cyan-500" />
-                <span className="text-slate-300 line-through">
-                  Complete baseline ATS resume audit (Score: 86)
-                </span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1. Career Mentor AI */}
+          <div
+            onClick={() => onNavigate('career-mentor')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-cyan-950/70 border border-cyan-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Compass className="w-5 h-5" />
               </div>
-              <div className="p-2.5 rounded-lg bg-[#090b10] border border-[#1e2638] flex items-start gap-2">
-                <input type="checkbox" defaultChecked className="mt-0.5 rounded text-cyan-500" />
-                <span className="text-slate-300 line-through">
-                  Tailor keywords for Stripe Frontend Engineer role
-                </span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#090b10] border border-[#1e2638] flex items-start gap-2">
-                <input type="checkbox" className="mt-0.5 rounded text-cyan-500" />
-                <span className="text-slate-300">
-                  Practice STAR responses for upcoming Datadog / Stripe rounds
-                </span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#090b10] border border-[#1e2638] flex items-start gap-2">
-                <input type="checkbox" className="mt-0.5 rounded text-cyan-500" />
-                <span className="text-slate-300">
-                  Add 2 new target engineering roles to application pipeline
-                </span>
-              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Career Mentor AI
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                24/7 personal career guidance in English, தமிழ் (Tamil), and Tanglish.
+              </p>
             </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Start Dialogue</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
           </div>
 
-          {/* Saved Resume History */}
-          <div className="p-5 rounded-xl bg-[#0e121b] border border-[#1e2638]">
-            <h2 className="text-xs font-semibold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-violet-400" />
-              Saved Resume Audits
-            </h2>
-            {savedResumes.length === 0 ? (
-              <p className="text-xs text-slate-500">No audits saved yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {savedResumes.map((res) => (
-                  <div
-                    key={res.id}
-                    onClick={() => onNavigate('resume-analyzer')}
-                    className="p-2.5 rounded-lg bg-[#090b10] border border-[#1e2638] hover:border-violet-500/50 transition-colors cursor-pointer flex items-center justify-between"
-                  >
+          {/* 2. Resume Analyzer */}
+          <div
+            onClick={() => onNavigate('resume-analyzer')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-950/70 border border-violet-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Resume Analyzer
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Upload PDF/DOCX resumes for ATS scoring, bullet improvements, and grammar checks.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Audit Resume</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 3. Skill Gap Analyzer */}
+          <div
+            onClick={() => onNavigate('skill-gap')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-950/70 border border-violet-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Target className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Skill Gap Analyzer
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Benchmark qualifications against target roles to identify missing competencies.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Detect Gaps</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 4. Learning Roadmap */}
+          <div
+            onClick={() => onNavigate('learning-roadmap')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-950/70 border border-violet-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Learning Roadmap
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Personalized weekly schedule with verified documentation links and daily tasks.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>View Curriculum</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 5. Mock Interview Platform */}
+          <div
+            onClick={() => onNavigate('mock-interviews')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-cyan-950/70 border border-cyan-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Mic className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Mock Interviews
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Practice technical & behavioral questions with browser voice input and model answers.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Practice Now</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 6. Job Matcher */}
+          <div
+            onClick={() => onNavigate('job-matcher')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-950/70 border border-violet-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Target className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                JD Matcher
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Paste any job description to compute fit percentage and keyword alignment.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Match Job</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 7. Smart Application Assistant */}
+          <div
+            onClick={() => onNavigate('outreach-assistant')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-950/70 border border-violet-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Send className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Outreach Assistant
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Generate high-converting recruiter InMails and LinkedIn connection drafts.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Draft Message</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 8. AI Portfolio Builder */}
+          <div
+            onClick={() => onNavigate('portfolio-builder')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-cyan-950/70 border border-cyan-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Code2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Portfolio Builder
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Compile modern, responsive single-file websites ready to deploy for free.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Build Portfolio</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 9. AI Salary Insights */}
+          <div
+            onClick={() => onNavigate('salary-insights')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-950/70 border border-emerald-800 flex items-center justify-center text-emerald-400 mb-3 group-hover:scale-110 transition-transform">
+                <DollarSign className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Salary Insights
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Benchmark compensation ranges for India and global tech metros.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Explore Bands</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 10. Cover Letter Generator */}
+          <div
+            onClick={() => onNavigate('cover-letter')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-950/70 border border-violet-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Mail className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Cover Letter
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Tailor persuasive letters addressing specific company values and requirements.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Write Letter</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 11. Find Remote Jobs */}
+          <div
+            onClick={() => onNavigate('jobs')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-cyan-950/70 border border-cyan-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Globe2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Remote Jobs
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Real vacancies synchronized from Remotive every 6 hours with fresher filters.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Find Openings</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+
+          {/* 12. Application Tracker */}
+          <div
+            onClick={() => onNavigate('tracker')}
+            className="p-5 rounded-2xl bg-[#0e121b] border border-[#1e2638] hover:border-cyan-500/60 cursor-pointer transition-all shadow-md group flex flex-col justify-between"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-950/70 border border-violet-800 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-110 transition-transform">
+                <Briefcase className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                Job Tracker
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Kanban pipeline for managing active applications, stages, and interview dates.
+              </p>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1 mt-4">
+              <span>Open Pipeline</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Grid: Recommended Jobs & Application Pipeline */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Recommended Jobs (6 Cols) */}
+        <div className="lg:col-span-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Globe2 className="w-4 h-4 text-cyan-400" />
+              Synchronized Remote Openings
+            </h3>
+            <button
+              onClick={() => onNavigate('jobs')}
+              className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold"
+            >
+              <span>View All</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {jobsLoading ? (
+              <div className="p-8 rounded-2xl bg-[#0e121b] border border-[#1e2638] text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                <div className="w-4 h-4 rounded-full border-2 border-violet-500/20 border-t-cyan-400 animate-spin" />
+                <span>Checking latest job synchronizations...</span>
+              </div>
+            ) : recommendedJobs.length > 0 ? (
+              recommendedJobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="p-4 rounded-xl bg-[#0e121b] border border-[#1e2638] hover:border-slate-700 transition-all space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-xs font-semibold text-white">
-                        {res.candidateName} — {res.targetRoleDetected}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {new Date(res.timestamp).toLocaleDateString()} · {res.experienceLevel}
-                      </div>
+                      <h4 className="text-xs font-bold text-white hover:text-cyan-400 transition-colors line-clamp-1">
+                        {job.title}
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {job.companyName} · {job.candidateRequiredLocation}
+                      </p>
                     </div>
-                    <div className="text-right">
-                      <span className="font-mono text-xs font-bold text-cyan-400">
-                        {res.atsScore}/100
+                    {job.salary && (
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800 shrink-0">
+                        {job.salary}
                       </span>
-                    </div>
+                    )}
                   </div>
-                ))}
+                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                    <span className="text-slate-500 font-mono">
+                      {new Date(job.publicationDate).toLocaleDateString()}
+                    </span>
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1"
+                    >
+                      <span>Apply on Remotive</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-6 rounded-xl bg-[#0e121b] border border-[#1e2638] text-center text-xs text-slate-400">
+                <span>No active jobs found for current filter. Browse the complete catalog in Remote Jobs.</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Active Application Pipeline (6 Cols) */}
+        <div className="lg:col-span-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-cyan-400" />
+              Active Job Applications ({activeApps.length})
+            </h3>
+            <button
+              onClick={() => onNavigate('tracker')}
+              className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold"
+            >
+              <span>Manage Pipeline</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {activeApps.length > 0 ? (
+              activeApps.slice(0, 3).map((app) => (
+                <div
+                  key={app.id}
+                  className="p-4 rounded-xl bg-[#0e121b] border border-[#1e2638] flex items-center justify-between text-xs"
+                >
+                  <div>
+                    <span className="font-bold text-white block">{app.companyName}</span>
+                    <span className="text-[11px] text-slate-400">{app.jobTitle}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono capitalize bg-violet-950/70 border border-violet-800 text-cyan-300">
+                      {app.status}
+                    </span>
+                    <button
+                      onClick={() => onSelectApplicationForPrep(app)}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white bg-violet-600 hover:bg-violet-500 transition-colors"
+                    >
+                      Prep Interview
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 rounded-2xl bg-[#0e121b] border border-[#1e2638] text-center space-y-2">
+                <Briefcase className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-xs font-semibold text-white">No Active Applications Tracked</p>
+                <p className="text-[11px] text-slate-400">
+                  Track jobs from the Remote Jobs finder or add custom applications to monitor follow-ups.
+                </p>
               </div>
             )}
           </div>

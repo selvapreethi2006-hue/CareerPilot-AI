@@ -14,12 +14,11 @@ import {
   Send,
   ExternalLink,
   Info,
+  ArrowRight,
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../types';
-import { DEMO_USERS } from '../lib/storage';
 import {
   getStoredSupabaseConfig,
-  getSupabaseClient,
   signUpWithSupabase,
   signInWithSupabase,
   resendVerificationEmail,
@@ -29,9 +28,10 @@ import {
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentUser: UserProfile;
+  currentUser: UserProfile | null;
   onSelectUser: (user: UserProfile) => void;
   onOpenSupabaseModal: () => void;
+  initialMode?: 'signin' | 'signup';
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -40,8 +40,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   currentUser,
   onSelectUser,
   onOpenSupabaseModal,
+  initialMode = 'signin',
 }) => {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -59,19 +60,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Supabase Auth Settings Verification
   const [emailConfirmEnforced, setEmailConfirmEnforced] = useState<boolean | null>(null);
-  const [authSettingsDetails, setAuthSettingsDetails] = useState('');
 
   const config = getStoredSupabaseConfig();
   const isSupabaseReady = config.isConnected && !!config.url && !!config.anonKey;
 
   useEffect(() => {
-    if (isOpen && isSupabaseReady) {
-      verifyProjectEmailConfirmationSettings().then((res) => {
-        setEmailConfirmEnforced(res.enforced);
-        setAuthSettingsDetails(res.details);
-      });
+    if (isOpen) {
+      setMode(initialMode);
+      setError(null);
+      setSuccessMsg(null);
+      if (isSupabaseReady) {
+        verifyProjectEmailConfirmationSettings().then((res) => {
+          setEmailConfirmEnforced(res.enforced);
+        });
+      }
     }
-  }, [isOpen, isSupabaseReady]);
+  }, [isOpen, initialMode, isSupabaseReady]);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -90,13 +94,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     const cleanEmail = email.trim();
     if (!cleanEmail || !password) {
-      setError('Please provide both email and password.');
+      setError('Please provide both your email address and password.');
       return;
     }
 
     if (!isSupabaseReady) {
       setError(
-        'Supabase Cloud is not connected yet. Real authentication requires connecting your project URL and Publishable/Anon key.'
+        'Supabase Cloud is not configured yet. Real authentication requires connecting your project URL and Publishable/Anon key.'
       );
       return;
     }
@@ -132,17 +136,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setPendingEmail(cleanEmail);
           setError(result.message);
         } else {
-          setError(result.message);
+          // Provide user-friendly messages for standard auth errors
+          const lowMsg = result.message.toLowerCase();
+          if (lowMsg.includes('invalid login credentials') || lowMsg.includes('invalid_grant')) {
+            setError('Invalid email or password. Please verify your credentials and try again.');
+          } else {
+            setError(result.message);
+          }
         }
         return;
       }
 
       if (result.user) {
         onSelectUser(result.user);
-        setSuccessMsg(`Welcome, ${result.user.name}!`);
+        setSuccessMsg(`Welcome back, ${result.user.name}!`);
         setTimeout(() => {
           onClose();
-        }, 600);
+        }, 500);
       }
     }
   };
@@ -163,20 +173,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleSelectDemo = (user: UserProfile) => {
-    const demoUser: UserProfile = {
-      ...user,
-      isDemo: true,
-      isSupabaseUser: false,
-      isEmailVerified: true, // Demo personas bypass verification for UI testing
-    };
-    onSelectUser(demoUser);
-    setSuccessMsg(`Switched to Demo Persona: ${user.name}`);
-    setTimeout(() => {
-      onClose();
-    }, 500);
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl bg-[#0e121b] border border-[#1e2638] shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
@@ -192,19 +188,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-violet-950/80 border border-violet-800/40 text-violet-400 mb-3">
             <Lock className="w-6 h-6 text-cyan-400" />
           </div>
-          <h2 className="text-xl font-bold text-white">CareerPilot AI Authentication</h2>
+          <h2 className="text-xl font-bold text-white">
+            {mode === 'signin' ? 'Sign In to CareerPilot AI' : 'Create Real Supabase Account'}
+          </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Sign in with your verified Supabase Cloud account or explore with an instant Sandbox persona.
+            {mode === 'signin'
+              ? 'Access your saved resumes, job tracker pipelines, and ATS audits.'
+              : 'Sign up with your personal email. Real email verification enforced.'}
           </p>
         </div>
 
-        {/* Supabase Email Confirmation Status Banner */}
+        {/* Supabase Connection Status Banner */}
         <div className="mb-4 p-3 rounded-xl bg-[#090b10] border border-[#1e2638] flex items-start gap-2.5 text-[11px]">
-          <Database className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <Database className={`w-4 h-4 shrink-0 mt-0.5 ${isSupabaseReady ? 'text-emerald-400' : 'text-amber-400'}`} />
           <div className="flex-1">
             <div className="flex items-center justify-between font-semibold text-white">
-              <span>Supabase Cloud Auth</span>
-              {emailConfirmEnforced !== null && (
+              <span>Supabase Cloud Authentication</span>
+              {isSupabaseReady && emailConfirmEnforced !== null && (
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
                     emailConfirmEnforced
@@ -218,8 +218,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
             <p className="text-slate-400 mt-0.5 leading-relaxed">
               {isSupabaseReady
-                ? 'Authentication is powered directly by your live Supabase project. Unverified emails are strictly blocked from dashboard access.'
-                : 'Supabase is not connected. Configure credentials to enable real login.'}
+                ? 'Directly integrated with your Supabase project. Passwords and sessions are cryptographically secured.'
+                : 'Supabase credentials not yet detected. Click below to enter your Project URL and Publishable Key.'}
             </p>
           </div>
         </div>
@@ -238,22 +238,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              A verification link was dispatched to your email address. Because Supabase email confirmation is enabled,
-              you <strong>cannot sign in or access the dashboard</strong> until your email is confirmed.
+              A verification link was dispatched to your email address by Supabase.
+              You <strong>must confirm your email before accessing the dashboard</strong>.
             </p>
 
             <div className="p-3 rounded-lg bg-[#090b10] border border-[#1e2638] text-[11px] text-slate-400 space-y-1.5">
               <div className="flex items-center gap-1.5 text-cyan-300 font-semibold">
                 <Info className="w-3.5 h-3.5" />
-                <span>How to verify:</span>
+                <span>Next steps:</span>
               </div>
               <ul className="list-disc list-inside space-y-1 text-slate-400 pl-1">
-                <li>Check your inbox (and spam folder) for the Supabase confirmation link.</li>
-                <li>
-                  <span className="text-slate-300">In Supabase Studio (for testing):</span> Go to{' '}
-                  <code className="text-amber-300">Authentication &gt; Users</code>, click{' '}
-                  <code className="text-amber-300">...</code> next to this email, and click <strong>"Confirm user"</strong>.
-                </li>
+                <li>Check your inbox (and spam/promotions folder) for the confirmation email.</li>
+                <li>Click the confirmation link to activate your account.</li>
+                <li>Return here to sign in with your email and password.</li>
               </ul>
             </div>
 
@@ -262,11 +259,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="button"
                 onClick={handleResendEmail}
                 disabled={resending || resendCooldown > 0}
-                className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-md"
               >
                 <Send className="w-3.5 h-3.5" />
                 {resending
-                  ? 'Sending...'
+                  ? 'Sending fresh email...'
                   : resendCooldown > 0
                   ? `Wait ${resendCooldown}s to Resend`
                   : 'Resend Verification Email'}
@@ -279,7 +276,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setMode('signin');
                   setEmail(pendingEmail);
                 }}
-                className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-[#131826] border border-[#1e2638]"
+                className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-[#131826] border border-[#1e2638] transition-colors"
               >
                 Back to Sign In
               </button>
@@ -297,7 +294,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setSuccessMsg(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  mode === 'signin' ? 'bg-[#131826] text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  mode === 'signin' ? 'bg-[#131826] text-white shadow-sm font-semibold' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 Sign In
@@ -310,10 +307,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setSuccessMsg(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  mode === 'signup' ? 'bg-[#131826] text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  mode === 'signup' ? 'bg-[#131826] text-white shadow-sm font-semibold' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                Create Account (Supabase)
+                Create Account
               </button>
             </div>
 
@@ -331,7 +328,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             )}
 
-            {/* Real Supabase Form */}
+            {/* Supabase Auth Form */}
             <form onSubmit={handleSubmit} className="space-y-3">
               {mode === 'signup' && (
                 <div>
@@ -343,6 +340,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="e.g. Jordan Smith"
+                      required
                       className="w-full pl-9 pr-3 py-2 text-xs bg-[#090b10] border border-[#1e2638] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                     />
                   </div>
@@ -378,6 +376,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="w-full pl-9 pr-3 py-2 text-xs bg-[#090b10] border border-[#1e2638] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                   />
                 </div>
+                {mode === 'signup' && (
+                  <p className="text-[10px] text-slate-500 mt-1">Minimum 6 characters required.</p>
+                )}
               </div>
 
               {mode === 'signup' && (
@@ -389,19 +390,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="w-full px-3 py-2 text-xs bg-[#090b10] border border-[#1e2638] rounded-lg text-white focus:outline-none focus:border-cyan-500"
                   >
                     <option value="student">College / University Student</option>
-                    <option value="fresher">Fresher / Recent Graduate (0-1 Yrs)</option>
-                    <option value="jobseeker">Active Job Seeker (1+ Yrs)</option>
+                    <option value="fresher">Fresher / Recent Graduate (0-1 Yrs Exp)</option>
+                    <option value="jobseeker">Active Job Seeker (1+ Yrs Exp)</option>
                   </select>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Default role is safely assigned server-side; accounts start on the free tier.
-                  </p>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={loading || !isSupabaseReady}
-                className="w-full mt-2 py-2.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 transition-colors shadow-md shadow-violet-900/30 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full mt-3 py-2.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 transition-all shadow-md shadow-violet-900/30 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -409,68 +407,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <span>Connecting to Supabase...</span>
                   </>
                 ) : mode === 'signin' ? (
-                  'Sign In to CareerPilot'
+                  'Sign In with Supabase'
                 ) : (
-                  'Register with Supabase'
+                  'Register & Send Verification Link'
                 )}
               </button>
             </form>
-
-            {/* Offline Sandbox Personas Section */}
-            <div className="mt-6 pt-5 border-t border-[#1e2638]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-mono text-cyan-400 uppercase tracking-wider font-semibold">
-                  Sandbox Demo Personas
-                </span>
-                <span className="text-[10px] text-slate-500">For offline UI testing</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mb-2.5">
-                Need to preview dashboard layouts without email confirmation? Use these instant pre-seeded profiles:
-              </p>
-
-              <div className="flex flex-col gap-2">
-                {DEMO_USERS.map((user) => {
-                  const isSelected = currentUser.id === user.id && currentUser.isDemo;
-                  return (
-                    <button
-                      key={user.id}
-                      onClick={() => handleSelectDemo(user)}
-                      className={`flex items-center justify-between p-2 rounded-lg text-left transition-all ${
-                        isSelected
-                          ? 'bg-violet-950/60 border border-violet-600/50 text-white'
-                          : 'bg-[#090b10] border border-[#1e2638] text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <img
-                          src={user.avatarUrl}
-                          alt={user.name}
-                          className="w-7 h-7 rounded-full object-cover border border-violet-500/30"
-                        />
-                        <div>
-                          <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                            {user.name}
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono">
-                              DEMO
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 truncate max-w-[210px]">{user.headline}</div>
-                        </div>
-                      </div>
-                      {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </>
         )}
 
-        {/* Supabase link */}
+        {/* Supabase Configuration Link */}
         <div className="mt-5 pt-4 border-t border-[#1e2638] flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-1.5">
             <Database className={`w-3.5 h-3.5 ${isSupabaseReady ? 'text-emerald-400' : 'text-amber-400'}`} />
-            <span>{isSupabaseReady ? 'Supabase Connected' : 'Supabase Not Configured'}</span>
+            <span>{isSupabaseReady ? 'Supabase Ready' : 'Supabase Not Configured'}</span>
           </div>
           <button
             type="button"
@@ -480,7 +430,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             }}
             className="text-cyan-400 hover:underline font-medium"
           >
-            Configure Keys & Schema
+            Configure Credentials
           </button>
         </div>
       </div>

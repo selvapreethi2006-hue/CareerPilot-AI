@@ -82,7 +82,7 @@ export const JobMatcher: React.FC<JobMatcherProps> = ({
       };
 
       setMatchResult(enrichedResult);
-      storage.saveJobMatch(enrichedResult);
+      storage.saveJobMatch(enrichedResult, currentUser.id);
     } catch (err: unknown) {
       console.error(err);
       setError('Failed to calculate job alignment. Please check your network and try again.');

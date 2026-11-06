@@ -1,9 +1,12 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { GoogleGenAI } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
+import { createCareerRoutes } from './server-career';
 
 dotenv.config();
 
@@ -49,7 +52,7 @@ async function generateWithGemini(prompt: string, responseMimeType = 'applicatio
           },
         }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout after 4.5s')), 4500)
+          setTimeout(() => reject(new Error('Timeout after 8s')), 8000)
         ),
       ]);
 
@@ -71,65 +74,132 @@ function analyzeActualResume(resumeText: string, targetRole?: string) {
   const textLower = resumeText.toLowerCase();
   const wordCount = resumeText.trim().split(/\s+/).filter(Boolean).length;
 
-  // 1. Extract Candidate Name (First clean line without common section headers)
+  // 1. Extract Contact Details
+  const emailMatch = resumeText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const phoneMatch = resumeText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+  const linksMatch = resumeText.match(/https?:\/\/[^\s)]+|linkedin\.com\/[^\s)]+|github\.com\/[^\s)]+/gi) || [];
+  
+  // Location detection
+  let location = '';
+  const locationRegex = /(?:location|address)?[:\s]*([A-Za-z\s]+,\s*[A-Za-z]{2,}(?:\s+\d{5})?)/i;
+  const locFound = resumeText.match(locationRegex);
+  if (locFound && locFound[1] && locFound[1].length < 40) {
+    location = locFound[1].trim();
+  }
+
+  // 2. Extract Candidate Name
   let candidateName = 'Job Seeker';
   for (const line of lines.slice(0, 5)) {
     const lower = line.toLowerCase();
-    if (!lower.includes('resume') && !lower.includes('curriculum') && !lower.includes('education') && !lower.includes('http') && !lower.includes('@') && line.length < 50) {
+    if (!lower.includes('resume') && !lower.includes('curriculum') && !lower.includes('education') && 
+        !lower.includes('http') && !lower.includes('@') && !lower.includes('experience') && line.length < 50) {
       candidateName = line.replace(/[^a-zA-Z\s.-]/g, '').trim() || candidateName;
       break;
     }
   }
 
-  // 2. Scan for Technical & Professional Skills from Actual Text
+  // 3. Scan for Technical & Professional Skills from Actual Text
   const techTaxonomy = [
     'javascript', 'typescript', 'python', 'java', 'c++', 'c#', 'golang', 'rust', 'ruby', 'php', 'swift', 'kotlin',
     'react', 'next.js', 'vue', 'angular', 'svelte', 'node.js', 'express', 'django', 'flask', 'fastapi', 'spring boot',
     'sql', 'postgresql', 'mysql', 'mongodb', 'redis', 'graphql', 'rest api', 'tailwind', 'html', 'css',
     'docker', 'kubernetes', 'aws', 'gcp', 'azure', 'git', 'github', 'ci/cd', 'terraform', 'linux',
     'machine learning', 'pytorch', 'tensorflow', 'pandas', 'numpy', 'figma', 'jest', 'cypress', 'playwright',
-    'patient triage', 'medication administration', 'iv therapy', 'epic', 'electronic health records', 'cpr certified',
     'financial modeling', 'accounting', 'budgeting', 'excel', 'powerbi', 'tableau',
     'ui/ux', 'wireframing', 'user research', 'seo', 'data analysis', 'statistical modeling'
   ];
 
   const softTaxonomy = [
     'leadership', 'communication', 'collaboration', 'problem solving', 'teamwork', 'agile', 'scrum',
-    'adaptability', 'analytical', 'mentorship', 'stakeholder management', 'critical thinking', 'patient care', 'empathy'
+    'adaptability', 'analytical', 'mentorship', 'stakeholder management', 'critical thinking', 'empathy'
   ];
 
   const foundTech = techTaxonomy.filter(k => textLower.includes(k)).map(k => k.toUpperCase());
   const foundSoft = softTaxonomy.filter(k => textLower.includes(k)).map(k => k.charAt(0).toUpperCase() + k.slice(1));
 
-  // 3. Detect actual Action Verbs in the resume
+  // 4. Action Verbs
   const actionVerbList = [
     'engineered', 'developed', 'built', 'created', 'designed', 'orchestrated', 'spearheaded', 'optimized',
     'implemented', 'automated', 'streamlined', 'reduced', 'increased', 'boosted', 'managed', 'led',
     'architected', 'resolved', 'deployed', 'maintained', 'analyzed', 'facilitated', 'administered',
-    'triaged', 'coordinated', 'delivered', 'evaluated', 'trained'
+    'coordinated', 'delivered', 'evaluated', 'trained'
   ];
   const detectedVerbs = actionVerbList.filter(v => textLower.includes(v));
   const actionVerbsCount = detectedVerbs.length;
 
-  // 4. Detect quantifiable metrics (% or $ or numbers)
+  // 5. Detect quantifiable metrics
   const numbersFound = (resumeText.match(/\b\d+(\.\d+)?%|\$\d+(\,\d+)?|\b\d+\+\b/g) || []);
   const hasStrongMetrics = numbersFound.length >= 3;
 
-  // 5. Compute Genuine ATS Score from Actual Evidence
-  let atsScore = 60;
+  // 6. ATS Score Calculation
+  let atsScore = 62;
   if (foundTech.length >= 5) atsScore += 12;
   else if (foundTech.length >= 2) atsScore += 6;
 
   if (foundSoft.length >= 2) atsScore += 6;
-  if (actionVerbsCount >= 5) atsScore += 8;
+  if (actionVerbsCount >= 4) atsScore += 8;
   if (hasStrongMetrics) atsScore += 8;
-  if (wordCount >= 200 && wordCount <= 750) atsScore += 6; // optimal resume length
+  if (wordCount >= 200 && wordCount <= 750) atsScore += 6;
   atsScore = Math.min(94, Math.max(54, atsScore));
 
-  // 6. Find real weak sentences in the user's text to rewrite
+  // 7. Parse Education Sections from actual text
+  const education: Array<{ institution: string; degree: string; year?: string; gpa?: string; details?: string }> = [];
+  const eduKeywords = ['bachelor', 'master', 'b.s.', 'm.s.', 'b.tech', 'm.tech', 'university', 'college', 'institute', 'polytechnic', 'degree', 'diploma'];
+  lines.forEach((line, i) => {
+    const lLow = line.toLowerCase();
+    if (eduKeywords.some(k => lLow.includes(k)) && line.length < 120) {
+      const yearMatch = line.match(/\b(19|20)\d{2}\b/);
+      const gpaMatch = line.match(/gpa[:\s]*(\d+(\.\d+)?(?:\/\d+)?)/i);
+      education.push({
+        institution: line.split(/[-–|]/)[0]?.trim() || line,
+        degree: line.split(/[-–|]/)[1]?.trim() || (lLow.includes('bachelor') ? 'Bachelor Degree' : 'Degree / Qualification'),
+        year: yearMatch ? yearMatch[0] : undefined,
+        gpa: gpaMatch ? gpaMatch[1] : undefined,
+      });
+    }
+  });
+
+  // 8. Parse Work Experience or Internships from actual text
+  const workExperience: Array<{ company: string; role: string; duration?: string; achievements: string[] }> = [];
+  const expKeywords = ['intern', 'engineer', 'developer', 'manager', 'lead', 'associate', 'analyst', 'specialist', 'consultant'];
+  lines.forEach((line, i) => {
+    const lLow = line.toLowerCase();
+    if (expKeywords.some(k => lLow.includes(k)) && !lLow.includes('seeking') && !lLow.includes('objective') && line.length < 100) {
+      // Collect succeeding bullet points
+      const bullets: string[] = [];
+      for (let j = i + 1; j < Math.min(lines.length, i + 5); j++) {
+        if (lines[j].startsWith('•') || lines[j].startsWith('-') || lines[j].startsWith('*') || lines[j].length > 40) {
+          bullets.push(lines[j].replace(/^[•\-\*]\s*/, ''));
+        } else {
+          break;
+        }
+      }
+      if (bullets.length > 0 && workExperience.length < 3) {
+        workExperience.push({
+          role: line.split(/[-–|]/)[0]?.trim() || line,
+          company: line.split(/[-–|]/)[1]?.trim() || 'Organization',
+          achievements: bullets,
+        });
+      }
+    }
+  });
+
+  // 9. Parse Projects from actual text
+  const projects: Array<{ name: string; description: string; techStack?: string[] }> = [];
+  lines.forEach((line, i) => {
+    if ((line.toLowerCase().includes('project') || line.toLowerCase().includes('built') || line.toLowerCase().includes('application')) && line.length < 70 && projects.length < 3) {
+      const nextLine = lines[i + 1] || '';
+      projects.push({
+        name: line.replace(/[:\-–].*$/, '').trim(),
+        description: nextLine.length > 20 ? nextLine : line,
+        techStack: foundTech.slice(0, 3),
+      });
+    }
+  });
+
+  // 10. Weak bullet rewrites based on their ACTUAL lines
   const weakMarkers = ['responsible for', 'helped', 'worked on', 'assisted', 'participated', 'handled', 'was part of'];
   const realWeakLines: string[] = [];
-
   for (const line of lines) {
     const lLower = line.toLowerCase();
     if (weakMarkers.some(m => lLower.includes(m)) && line.length > 20 && line.length < 160) {
@@ -137,36 +207,86 @@ function analyzeActualResume(resumeText: string, targetRole?: string) {
     }
   }
 
-  // Build bullet point rewrites based on their ACTUAL lines
   const bulletPointImprovements = [];
   if (realWeakLines.length > 0) {
     const original = realWeakLines[0];
-    const improved = `Spearheaded delivery of ${original.replace(/^(responsible for|helped|worked on|assisted in)\s+/i, '')}, driving a 25% efficiency gain and accelerating sprint completion.`;
+    const cleanAction = original.replace(/^(responsible for|helped|worked on|assisted in|participated in)\s+/i, '');
     bulletPointImprovements.push({
       original,
-      improved,
-      reason: 'Swapped passive duty phrasing for measurable outcomes and strong active leadership verbs.',
+      improved: `Spearheaded delivery of ${cleanAction}, driving a 25% throughput gain and accelerating sprint completion.`,
+      reason: 'Swapped passive duty phrasing for measurable outcomes and active leadership verbs.',
     });
   } else {
-    // Pick the first line from projects or experience
     const candidateBullet = lines.find(l => l.length > 40 && l.length < 130 && !l.includes(':')) || lines[4] || 'Collaborated on application development and feature testing.';
+    const cleanText = candidateBullet.replace(/^[•\-\*]\s*/, '');
     bulletPointImprovements.push({
-      original: candidateBullet.replace(/^[•\-\*]\s*/, ''),
-      improved: `Engineered end-to-end deliverables for ${candidateBullet.replace(/^[•\-\*]\s*/, '').slice(0, 50)}, cutting turnaround latency by 35% and enhancing reliability.`,
+      original: cleanText,
+      improved: `Engineered end-to-end deliverables for ${cleanText.slice(0, 60)}, reducing turnaround latency by 35% and boosting reliability.`,
       reason: 'Augmented with quantifiable throughput metric and strong engineering ownership verb.',
     });
   }
 
-  // 7. Determine Target Role and Experience Level
+  // 11. Grammar and spelling checks
+  const grammarAndSpelling: Array<{ originalText: string; suggestedCorrection: string; explanation: string }> = [];
+  if (textLower.includes('alot')) {
+    grammarAndSpelling.push({ originalText: 'alot', suggestedCorrection: 'a lot', explanation: '"A lot" is always two words in professional writing.' });
+  }
+  if (textLower.includes('experiance')) {
+    grammarAndSpelling.push({ originalText: 'experiance', suggestedCorrection: 'experience', explanation: 'Correct spelling for ATS keyword matching.' });
+  }
+  if (textLower.includes('responsable')) {
+    grammarAndSpelling.push({ originalText: 'responsable', suggestedCorrection: 'responsible', explanation: 'Correct spelling for ATS keyword matching.' });
+  }
+  if (grammarAndSpelling.length === 0) {
+    const candidateLine = lines.find(l => l.length > 30 && !l.endsWith('.')) || lines[2];
+    if (candidateLine) {
+      grammarAndSpelling.push({
+        originalText: candidateLine.slice(0, 50),
+        suggestedCorrection: `${candidateLine.slice(0, 50)}.`,
+        explanation: 'Standardize bullet formatting: Ensure consistent end-punctuation across all experience deliverables.',
+      });
+    }
+  }
+
+  // 12. Determine Role and Missing Skills
   const detectedRole = targetRole || (textLower.includes('frontend') ? 'Frontend Developer' : textLower.includes('full stack') || textLower.includes('fullstack') ? 'Full Stack Engineer' : textLower.includes('data') ? 'Data Analyst / Engineer' : 'Software Engineer');
   const experienceLevel = textLower.includes('senior') || textLower.includes('lead') || textLower.includes('principal') ? 'Senior (5+ yrs)' : textLower.includes('intern') || textLower.includes('student') || textLower.includes('bachelor') || wordCount < 300 ? 'Fresher / Entry-Level' : 'Junior / Mid-Level';
 
-  // 8. Missing tech recommendations
   const allCoreTech = ['TypeScript', 'React', 'Node.js', 'Docker', 'PostgreSQL', 'AWS', 'CI/CD Pipelines'];
   const missingTech = allCoreTech.filter(t => !foundTech.includes(t.toUpperCase())).slice(0, 4);
 
+  const missingSkillsAndSuggestions = missingTech.map(tech => ({
+    skill: tech,
+    rationale: `Frequently required in modern ${detectedRole} postings for automated keyword matching.`,
+    recommendedAction: `Add a demonstration project or module showcasing ${tech} integration in your portfolio.`,
+  }));
+
+  const atsKeywordSuggestions = [
+    ...foundTech.slice(0, 4).map(k => ({
+      keyword: k,
+      category: 'Technical Core',
+      status: 'found' as const,
+      recommendation: 'Position prominently in top skills summary.',
+    })),
+    ...missingTech.slice(0, 4).map(k => ({
+      keyword: k,
+      category: 'Recommended Addition',
+      status: 'missing' as const,
+      recommendation: `Integrate into project bullets or qualifications section to satisfy ATS screening filters for ${detectedRole}.`,
+    })),
+  ];
+
+  // 13. Improved Professional Summary
+  const improvedProfessionalSummary = `Results-driven ${detectedRole} with demonstrated expertise in ${foundTech.slice(0, 3).join(', ') || 'modern software engineering'} and ${foundSoft.slice(0, 2).join(', ') || 'collaborative problem-solving'}. Proven track record of architecting maintainable solutions, streamlining deployment workflows, and delivering user-centric features with measurable business impact.`;
+
   return {
     candidateName,
+    contactDetails: {
+      email: emailMatch ? emailMatch[0] : undefined,
+      phone: phoneMatch ? phoneMatch[0] : undefined,
+      location: location || undefined,
+      links: linksMatch.length > 0 ? linksMatch.slice(0, 3) : undefined,
+    },
     targetRoleDetected: detectedRole,
     experienceLevel,
     atsScore,
@@ -181,19 +301,26 @@ function analyzeActualResume(resumeText: string, targetRole?: string) {
       soft: foundSoft.length > 0 ? foundSoft : ['Collaboration', 'Communication', 'Problem Solving'],
       tools: ['Git/GitHub', 'VS Code', 'Project Management'],
     },
+    education: education.length > 0 ? education : undefined,
+    workExperience: workExperience.length > 0 ? workExperience : undefined,
+    projects: projects.length > 0 ? projects : undefined,
     strengths: [
       foundTech.length > 3 ? `Verified core technical skills detected: ${foundTech.slice(0, 4).join(', ')}` : 'Clear chronological project progression',
       hasStrongMetrics ? `Includes quantifiable performance indicators (${numbersFound.slice(0, 3).join(', ')})` : 'Solid foundational background and clear section organization',
-      `Identified ${actionVerbsCount} strong action verbs across project deliverables`,
+      `Identified ${actionVerbsCount} strong action verbs across deliverables`,
     ],
     weaknesses: [
       !hasStrongMetrics ? 'Lacks specific numerical metrics (e.g. % speedup, user volume, test coverage)' : 'Could expand on automated test coverage and CI/CD pipelines',
       missingTech.length > 0 ? `Industry-standard tools not yet highlighted: ${missingTech.join(', ')}` : 'Consider adding cloud deployment credentials',
       realWeakLines.length > 0 ? 'Contains passive duty phrases like "responsible for" or "helped" instead of active ownership verbs' : 'Could highlight cross-functional stakeholder communication',
     ],
+    missingSkillsAndSuggestions,
+    grammarAndSpelling,
+    improvedProfessionalSummary,
     actionVerbsCount,
     actionVerbsSuggestions: ['Orchestrated', 'Spearheaded', 'Optimized', 'Architected', 'Revitalized', 'Automated'],
     bulletPointImprovements,
+    atsKeywordSuggestions,
     recommendedCertifications: [
       'AWS Certified Cloud Practitioner or Developer Associate',
       'Meta Frontend or Full-Stack Professional Certificate',
@@ -279,6 +406,12 @@ app.post('/api/extract-resume-text', async (req, res) => {
     }
 
     const buffer = Buffer.from(fileBase64, 'base64');
+    
+    // File size validation (10MB max)
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: 'File size exceeds 10MB limit. Please upload a smaller document.' });
+    }
+
     const lowerName = fileName.toLowerCase();
     let extractedText = '';
 
@@ -289,18 +422,29 @@ app.post('/api/extract-resume-text', async (req, res) => {
       extractedText = result.text || '';
       // Clean up common PDF artifact lines
       extractedText = extractedText.replace(/-- \d+ of \d+ --/g, '').trim();
+
+      // Scanned / Image-based PDF Detection
+      const words = extractedText.trim().split(/\s+/).filter(Boolean);
+      if (extractedText.trim().length < 25 || words.length < 5) {
+        return res.status(422).json({
+          success: false,
+          isScanned: true,
+          error: 'This PDF appears to be a scanned or image-based document with no extractable text. Please upload a digital text-based PDF or copy and paste your resume text.',
+        });
+      }
     } else if (lowerName.endsWith('.docx') || lowerName.endsWith('.doc')) {
       const result = await mammoth.extractRawText({ buffer });
       extractedText = result.value || '';
+      if (extractedText.trim().length < 20) {
+        return res.status(422).json({
+          success: false,
+          isScanned: false,
+          error: 'Could not extract text from this document. Please ensure it contains readable text.',
+        });
+      }
     } else {
       // Plain text / markdown
       extractedText = buffer.toString('utf-8');
-    }
-
-    if (!extractedText || extractedText.trim().length < 15) {
-      return res.status(422).json({
-        error: 'No readable text could be extracted from this document. Please copy and paste the text directly.',
-      });
     }
 
     const words = extractedText.trim().split(/\s+/).filter(Boolean).length;
@@ -311,6 +455,7 @@ app.post('/api/extract-resume-text', async (req, res) => {
       fileName,
       wordCount: words,
       charCount: extractedText.length,
+      fileSize: buffer.length,
     });
   } catch (error) {
     console.error('File text extraction error:', error);
@@ -328,11 +473,24 @@ app.post('/api/gemini/analyze-resume', async (req, res) => {
       return res.status(400).json({ error: 'Please provide valid resume text of at least 20 characters.' });
     }
 
-    const prompt = `You are CareerPilot AI, an elite hiring manager and ATS resume auditor.
-Analyze the following resume thoroughly based on its actual content. If a target role is provided (${targetRole || 'Not specified'}), evaluate fit for that role.
+    const prompt = `You are CareerPilot AI, an elite ATS algorithm, hiring manager, and executive recruiter.
+Analyze the following resume thoroughly based ONLY on its actual extracted content.
+Target Role to evaluate fit for: ${targetRole || 'Software Engineer / General Candidate'}.
+
+CRITICAL GROUNDING RULES:
+1. ONLY evaluate and extract information actually present in the resume text.
+2. DO NOT hallucinate, invent, or assume degrees, certifications, companies, projects, or metrics not explicitly written.
+3. If contact details, education, or experience are missing or incomplete, accurately reflect what is there and flag missing sections in weaknesses/suggestions.
+
 Return a structured JSON object strictly matching this schema:
 {
-  "candidateName": "Extracted full name from the resume",
+  "candidateName": "Extracted full name from the top of the resume",
+  "contactDetails": {
+    "email": "email if present in text, or omit",
+    "phone": "phone number if present, or omit",
+    "location": "city/state/country if present, or omit",
+    "links": ["LinkedIn/GitHub/portfolio URLs present in resume"]
+  },
   "targetRoleDetected": "Target role or best matching job title",
   "experienceLevel": "Fresher / Entry-Level | Junior (1-2 yrs) | Mid-Level (3-5 yrs) | Senior (5+ yrs)",
   "atsScore": number from 0 to 100,
@@ -343,28 +501,75 @@ Return a structured JSON object strictly matching this schema:
     "keywords": number from 0 to 100
   },
   "extractedSkills": {
-    "technical": ["actual detected hard skills in the resume"],
-    "soft": ["actual detected soft skills in the resume"],
-    "tools": ["actual detected tools/frameworks"]
+    "technical": ["actual detected hard/technical skills from text"],
+    "soft": ["actual detected interpersonal/soft skills from text"],
+    "tools": ["actual detected tools/software/platforms from text"]
   },
-  "strengths": ["3 concise specific strengths found in this actual resume"],
-  "weaknesses": ["3 actionable weaknesses found in this actual resume"],
+  "education": [
+    {
+      "institution": "University/College name",
+      "degree": "Degree name / major",
+      "year": "Graduation year or date range if stated",
+      "gpa": "GPA or grade if stated",
+      "details": "Honors or relevant coursework if stated"
+    }
+  ],
+  "workExperience": [
+    {
+      "company": "Company or organization name",
+      "role": "Job title",
+      "duration": "Dates of employment if stated",
+      "achievements": ["Bullet points of deliverables written in the resume"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Project title",
+      "description": "What was built and the impact",
+      "techStack": ["technologies used in this project"]
+    }
+  ],
+  "strengths": ["3-4 specific strengths grounded in this candidate's actual background"],
+  "weaknesses": ["3-4 actionable weaknesses or missing elements based strictly on this resume"],
+  "missingSkillsAndSuggestions": [
+    {
+      "skill": "Missing skill relevant to target role",
+      "rationale": "Why recruiters/ATS expect this for the target role",
+      "recommendedAction": "Concrete project or step to bridge the gap"
+    }
+  ],
+  "grammarAndSpelling": [
+    {
+      "originalText": "Exact sentence or phrase with grammatical weakness, passive voice, or spelling error",
+      "suggestedCorrection": "Polished correction",
+      "explanation": "Why this correction elevates the resume"
+    }
+  ],
+  "improvedProfessionalSummary": "A concise, high-converting 3-4 sentence professional summary written specifically using this candidate's actual qualifications.",
   "actionVerbsCount": number,
-  "actionVerbsSuggestions": ["5 strong punchy action verbs suitable for this resume"],
+  "actionVerbsSuggestions": ["5-6 punchy power verbs suitable for this candidate"],
   "bulletPointImprovements": [
     {
-      "original": "an actual weak or passive sentence found in the resume",
-      "improved": "transformed high-impact bullet with metric and strong verb",
+      "original": "an actual weak or passive sentence from their resume",
+      "improved": "transformed high-impact bullet with quantifiable outcome and active power verb",
       "reason": "why this revision converts better"
     }
   ],
-  "recommendedCertifications": ["2-3 specific real credentials that boost this profile"],
-  "summaryReview": "2-3 sentences of empathetic, rigorous, motivating summary feedback"
+  "atsKeywordSuggestions": [
+    {
+      "keyword": "keyword name",
+      "category": "Technical Core | Methodologies | Industry Standards",
+      "status": "found" or "missing",
+      "recommendation": "where to place or how to incorporate this keyword"
+    }
+  ],
+  "recommendedCertifications": ["2-3 specific real-world industry certifications to boost this profile"],
+  "summaryReview": "2-3 sentences of empathetic, rigorous, and motivating ATS summary feedback"
 }
 
 Resume Text:
 """
-${resumeText.slice(0, 10000)}
+${resumeText.slice(0, 14000)}
 """`;
 
     const geminiResult = await generateWithGemini(prompt, 'application/json');
@@ -648,6 +853,516 @@ Return a structured JSON object strictly matching this schema:
   }
 });
 
+// Mount the 7 Advanced AI Career Services (Skill Gap, Mock Interview, Roadmap, Outreach, Portfolio, Salaries, Mentor)
+app.use('/api/gemini', createCareerRoutes(generateWithGemini));
+
+// ---------------------------------------------------------------------------
+// AUTOMATIC JOB OPENING SYNC ENGINE (6-Hour Automated Cron & Safe Persistence)
+// ---------------------------------------------------------------------------
+const JOBS_CACHE_FILE = path.join(__dirname, '.jobs_store.json');
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const MANUAL_REFRESH_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes cooldown for manual UI button
+
+interface StoredJob {
+  id: string | number;
+  url: string;
+  title: string;
+  companyName: string;
+  companyLogo: string | null;
+  category: string;
+  tags: string[];
+  jobType: string;
+  publicationDate: string;
+  candidateRequiredLocation: string;
+  salary: string | null;
+  description: string;
+  source: 'Remotive';
+  isNew?: boolean;
+  isFresherFriendly?: boolean;
+  isIndiaEligible?: boolean;
+  firstSeenAt?: string;
+  lastVerifiedAt?: string;
+}
+
+interface JobsSyncState {
+  lastSuccessfulSync: string | null;
+  lastAttemptedSync: string | null;
+  syncStatus: 'healthy' | 'warning' | 'error';
+  lastError: string | null;
+  totalJobs: number;
+  fresherCount: number;
+  indiaCount: number;
+  nextScheduledSync: string | null;
+  jobs: StoredJob[];
+}
+
+let jobsStore: JobsSyncState = {
+  lastSuccessfulSync: null,
+  lastAttemptedSync: null,
+  syncStatus: 'healthy',
+  lastError: null,
+  totalJobs: 0,
+  fresherCount: 0,
+  indiaCount: 0,
+  nextScheduledSync: null,
+  jobs: [],
+};
+
+// Load persistent cache from disk on boot
+function loadJobsStoreFromDisk() {
+  try {
+    if (fs.existsSync(JOBS_CACHE_FILE)) {
+      const raw = fs.readFileSync(JOBS_CACHE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.jobs)) {
+        jobsStore = {
+          ...jobsStore,
+          ...parsed,
+        };
+        console.log(`Loaded ${jobsStore.jobs.length} cached job openings from persistent store.`);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read persistent jobs store file:', err);
+  }
+}
+
+// Persist store to disk
+function saveJobsStoreToDisk() {
+  try {
+    fs.writeFileSync(JOBS_CACHE_FILE, JSON.stringify(jobsStore, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Failed saving persistent jobs store file:', err);
+  }
+}
+
+loadJobsStoreFromDisk();
+
+// Heuristics: Fresher & Internship Friendly Detection
+function checkFresherFriendly(title: string, desc: string, tags: string[] = []): boolean {
+  const combined = `${title} ${desc.slice(0, 500)} ${tags.join(' ')}`.toLowerCase();
+  const keywords = [
+    'intern', 'internship', 'fresher', 'entry level', 'entry-level', 'junior',
+    'trainee', 'graduate', 'associate', '0-1 year', '0-2 year', 'no experience required',
+    'student', 'working student'
+  ];
+  return keywords.some(k => combined.includes(k));
+}
+
+// Heuristics: India & International Remote Eligibility
+function checkIndiaEligible(location: string): boolean {
+  const loc = (location || '').toLowerCase();
+  return (
+    loc.includes('worldwide') ||
+    loc.includes('anywhere') ||
+    loc.includes('india') ||
+    loc.includes('apac') ||
+    loc.includes('asia') ||
+    loc.includes('global') ||
+    loc.includes('remote - all')
+  );
+}
+
+// Optional Supabase cloud synchronization for job listings
+async function syncJobsToSupabase(jobsToSync: StoredJob[]) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return;
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false },
+    });
+
+    const rows = jobsToSync.slice(0, 100).map(j => ({
+      id: `remotive_${j.id}`,
+      url: j.url,
+      title: j.title,
+      company_name: j.companyName,
+      company_logo: j.companyLogo,
+      category: j.category,
+      tags: j.tags,
+      job_type: j.jobType,
+      publication_date: j.publicationDate,
+      candidate_required_location: j.candidateRequiredLocation,
+      salary: j.salary,
+      description: j.description,
+      source: 'Remotive',
+      is_fresher_friendly: !!j.isFresherFriendly,
+      is_india_eligible: !!j.isIndiaEligible,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabase.from('job_listings').upsert(rows, { onConflict: 'url' });
+    if (error) {
+      console.warn('Notice: Supabase job_listings table sync skipped or pending migration:', error.message);
+    } else {
+      console.log(`Successfully synced ${rows.length} jobs to Supabase job_listings.`);
+    }
+  } catch (err) {
+    console.warn('Background Supabase jobs sync exception:', err);
+  }
+}
+
+// Core Scheduled Sync Function (runs every 6h automatically, via cron, or via UI refresh)
+let isSyncInProgress = false;
+
+async function performJobSync(triggerSource = 'scheduled-timer'): Promise<{
+  success: boolean;
+  syncedCount: number;
+  totalActive: number;
+  newJobsCount: number;
+  error?: string;
+}> {
+  if (isSyncInProgress) {
+    return {
+      success: true,
+      syncedCount: 0,
+      totalActive: jobsStore.jobs.length,
+      newJobsCount: 0,
+      error: 'Sync already in progress',
+    };
+  }
+
+  isSyncInProgress = true;
+  const startTime = Date.now();
+  jobsStore.lastAttemptedSync = new Date().toISOString();
+
+  try {
+    console.log(`[JobSync] Starting automated job sync (${triggerSource}) from Remotive...`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const remotiveResp = await fetch('https://remotive.com/api/remote-jobs', {
+      headers: {
+        'User-Agent': 'CareerPilot-AI/1.0 (AutomatedRemoteJobsTracker)',
+        'Accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!remotiveResp.ok) {
+      throw new Error(`Remotive API responded with HTTP ${remotiveResp.status}`);
+    }
+
+    const payload = await remotiveResp.json();
+    const rawJobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+
+    if (rawJobs.length === 0) {
+      throw new Error('Remotive returned an empty job payload.');
+    }
+
+    const now = Date.now();
+    const existingMap = new Map<string, StoredJob>();
+    jobsStore.jobs.forEach(j => {
+      existingMap.set(j.url, j);
+    });
+
+    let newJobsCount = 0;
+
+    // Map, normalize and detect freshness & categories
+    const newlyFetched: StoredJob[] = rawJobs.map((j: any) => {
+      const url = j.url;
+      const pubDate = j.publication_date || new Date().toISOString();
+      const pubTime = new Date(pubDate).getTime();
+      const isNew = (now - pubTime) < 48 * 3600 * 1000; // < 48 hours
+      const isFresher = checkFresherFriendly(j.title || '', j.description || '', j.tags || []);
+      const isIndia = checkIndiaEligible(j.candidate_required_location || '');
+
+      const existing = existingMap.get(url);
+      if (!existing) newJobsCount++;
+
+      return {
+        id: j.id,
+        url: j.url,
+        title: j.title || 'Untitled Role',
+        companyName: j.company_name || 'Hiring Company',
+        companyLogo: j.company_logo || j.company_logo_url || null,
+        category: j.category || 'General',
+        tags: Array.isArray(j.tags) ? j.tags : [],
+        jobType: j.job_type || 'full_time',
+        publicationDate: pubDate,
+        candidateRequiredLocation: j.candidate_required_location || 'Worldwide',
+        salary: j.salary && j.salary.trim() ? j.salary.trim() : null, // strictly null if not provided
+        description: j.description || '',
+        source: 'Remotive',
+        isNew,
+        isFresherFriendly: isFresher,
+        isIndiaEligible: isIndia,
+        firstSeenAt: existing?.firstSeenAt || new Date().toISOString(),
+        lastVerifiedAt: new Date().toISOString(),
+      };
+    });
+
+    // Merge into store deduplicating by URL
+    newlyFetched.forEach(j => {
+      existingMap.set(j.url, j);
+    });
+
+    // Prune expired or stale jobs (> 60 days old)
+    const MAX_JOB_AGE_MS = 60 * 24 * 3600 * 1000;
+    const activeJobs = Array.from(existingMap.values()).filter(j => {
+      const age = now - new Date(j.publicationDate).getTime();
+      return age < MAX_JOB_AGE_MS;
+    });
+
+    // Prioritize newly posted jobs
+    activeJobs.sort((a, b) => new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime());
+
+    // Update store state
+    const fresherCount = activeJobs.filter(j => j.isFresherFriendly).length;
+    const indiaCount = activeJobs.filter(j => j.isIndiaEligible).length;
+
+    jobsStore = {
+      lastSuccessfulSync: new Date().toISOString(),
+      lastAttemptedSync: new Date().toISOString(),
+      syncStatus: 'healthy',
+      lastError: null,
+      totalJobs: activeJobs.length,
+      fresherCount,
+      indiaCount,
+      nextScheduledSync: new Date(now + SIX_HOURS_MS).toISOString(),
+      jobs: activeJobs,
+    };
+
+    saveJobsStoreToDisk();
+
+    // Background push to Supabase if configured
+    syncJobsToSupabase(activeJobs).catch(e => console.warn('Supabase sync background catch:', e));
+
+    console.log(`[JobSync] Finished in ${Date.now() - startTime}ms. Active: ${activeJobs.length}, New: ${newJobsCount}, Freshers: ${fresherCount}, India-eligible: ${indiaCount}`);
+
+    return {
+      success: true,
+      syncedCount: rawJobs.length,
+      totalActive: activeJobs.length,
+      newJobsCount,
+    };
+  } catch (err: any) {
+    console.warn(`[JobSync] Warning during sync (${triggerSource}):`, err.message);
+    // CRITICAL: Preserve existing valid jobs in the store so user is NEVER left with an empty list
+    jobsStore.syncStatus = jobsStore.jobs.length > 0 ? 'warning' : 'error';
+    jobsStore.lastError = err.message || 'Error communicating with Remotive API';
+    saveJobsStoreToDisk();
+
+    return {
+      success: false,
+      syncedCount: 0,
+      totalActive: jobsStore.jobs.length,
+      newJobsCount: 0,
+      error: err.message,
+    };
+  } finally {
+    isSyncInProgress = false;
+  }
+}
+
+// Background Cron Timer (Every 6 Hours on Node process)
+setInterval(async () => {
+  await performJobSync('scheduled-background-timer-6h');
+}, SIX_HOURS_MS);
+
+// Initial bootstrap check on server startup:
+setTimeout(() => {
+  const needsInitialSync =
+    jobsStore.jobs.length === 0 ||
+    !jobsStore.lastSuccessfulSync ||
+    (Date.now() - new Date(jobsStore.lastSuccessfulSync).getTime()) > SIX_HOURS_MS;
+
+  if (needsInitialSync) {
+    console.log('[JobSync] Initial job store is empty or older than 6 hours. Running bootstrap sync...');
+    performJobSync('server-startup-bootstrap');
+  }
+}, 4000);
+
+// API Route: Query Synced Job Listings
+app.get('/api/jobs/remotive', async (req, res) => {
+  try {
+    const search = req.query.search ? String(req.query.search).toLowerCase().trim() : '';
+    const category = req.query.category ? String(req.query.category).toLowerCase().trim() : '';
+    const fresherOnly = req.query.fresherOnly === 'true';
+    const indiaOnly = req.query.indiaOnly === 'true';
+    const jobType = req.query.jobType ? String(req.query.jobType).toLowerCase().trim() : '';
+    const location = req.query.location ? String(req.query.location).toLowerCase().trim() : '';
+    const limit = req.query.limit ? Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10))) : 60;
+
+    // Filter from canonical synced store
+    let filtered = jobsStore.jobs.filter(job => {
+      // 1. Search term (in title, company, tags, or description)
+      if (search) {
+        const titleMatch = job.title.toLowerCase().includes(search);
+        const companyMatch = job.companyName.toLowerCase().includes(search);
+        const tagsMatch = job.tags.some(t => t.toLowerCase().includes(search));
+        const descMatch = job.description.toLowerCase().includes(search);
+        if (!titleMatch && !companyMatch && !tagsMatch && !descMatch) return false;
+      }
+
+      // 2. Category
+      if (category && category !== 'all') {
+        const catClean = job.category.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const queryClean = category.replace(/[^a-z0-9]/g, '');
+        if (!catClean.includes(queryClean) && !queryClean.includes(catClean)) return false;
+      }
+
+      // 3. Fresher & Internship priority filter
+      if (fresherOnly && !job.isFresherFriendly) {
+        return false;
+      }
+
+      // 4. India & APAC location filter
+      if (indiaOnly && !job.isIndiaEligible) {
+        return false;
+      }
+
+      // 5. Job Type filter
+      if (jobType && jobType !== 'all') {
+        const jType = (job.jobType || '').toLowerCase();
+        if (jobType === 'full_time' && !jType.includes('full')) return false;
+        if (jobType === 'internship' && !jType.includes('intern')) return false;
+        if (jobType === 'contract' && !jType.includes('contract') && !jType.includes('freelance')) return false;
+      }
+
+      // 6. Location filter
+      if (location && location !== 'all') {
+        const loc = (job.candidateRequiredLocation || '').toLowerCase();
+        if (location === 'worldwide' && !loc.includes('worldwide') && !loc.includes('anywhere')) return false;
+        if (location === 'india' && !job.isIndiaEligible) return false;
+        if (location === 'usa' && !loc.includes('usa') && !loc.includes('us') && !loc.includes('united states') && !loc.includes('worldwide')) return false;
+        if (location === 'europe' && !loc.includes('europe') && !loc.includes('eu') && !loc.includes('uk') && !loc.includes('worldwide')) return false;
+      }
+
+      return true;
+    });
+
+    return res.json({
+      success: true,
+      source: 'Remotive',
+      count: filtered.length,
+      totalCount: jobsStore.jobs.length,
+      fresherCount: jobsStore.fresherCount,
+      indiaCount: jobsStore.indiaCount,
+      jobs: filtered.slice(0, limit),
+      lastSuccessfulSync: jobsStore.lastSuccessfulSync,
+      nextScheduledSync: jobsStore.nextScheduledSync,
+      syncStatus: jobsStore.syncStatus,
+      lastError: jobsStore.lastError,
+      notice: 'Real remote job listings synchronized automatically every 6 hours from Remotive API (24h verified delay).',
+    });
+  } catch (err: any) {
+    console.error('Error serving jobs:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve jobs. Using existing verified listings.',
+      jobs: jobsStore.jobs.slice(0, 30),
+      lastSuccessfulSync: jobsStore.lastSuccessfulSync,
+      syncStatus: 'warning',
+    });
+  }
+});
+
+// API Route: Scheduled Cron Sync Endpoint (Vercel Cron & External Schedulers)
+// Configured in vercel.json: { "path": "/api/jobs/sync", "schedule": "0 */6 * * *" }
+app.all(['/api/jobs/sync', '/api/cron/jobs'], async (req, res) => {
+  try {
+    // Optional Vercel Cron Secret Verification
+    if (process.env.CRON_SECRET) {
+      const authHeader = req.headers.authorization;
+      if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid CRON_SECRET token.' });
+      }
+    }
+
+    const result = await performJobSync('vercel-cron-endpoint');
+    return res.json({
+      success: result.success,
+      trigger: 'vercel-cron',
+      schedule: 'Every 6 hours (0 */6 * * *)',
+      syncedCount: result.syncedCount,
+      totalActive: result.totalActive,
+      newJobsCount: result.newJobsCount,
+      lastSuccessfulSync: jobsStore.lastSuccessfulSync,
+      nextScheduledSync: jobsStore.nextScheduledSync,
+      syncStatus: jobsStore.syncStatus,
+      error: result.error || null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API Route: Manual Refresh Endpoint with Rate-Limit / Cooldown Protection
+app.post('/api/jobs/refresh', async (req, res) => {
+  try {
+    const now = Date.now();
+    const lastSyncTime = jobsStore.lastSuccessfulSync ? new Date(jobsStore.lastSuccessfulSync).getTime() : 0;
+    const elapsedMs = now - lastSyncTime;
+
+    // Respect Remotive API Terms: Enforce 3-minute cooldown on manual UI refreshes
+    if (elapsedMs < MANUAL_REFRESH_COOLDOWN_MS && jobsStore.jobs.length > 0) {
+      const waitSeconds = Math.ceil((MANUAL_REFRESH_COOLDOWN_MS - elapsedMs) / 1000);
+      return res.json({
+        success: true,
+        throttled: true,
+        message: `Job listings are fresh (updated ${Math.floor(elapsedMs / 1000)}s ago). Next live sync available in ${waitSeconds}s to respect Remotive rate limits.`,
+        lastSuccessfulSync: jobsStore.lastSuccessfulSync,
+        nextScheduledSync: jobsStore.nextScheduledSync,
+        totalJobs: jobsStore.totalJobs,
+        syncStatus: jobsStore.syncStatus,
+      });
+    }
+
+    const result = await performJobSync('manual-ui-refresh');
+    return res.json({
+      success: result.success,
+      throttled: false,
+      message: `Successfully synchronized ${result.totalActive} active job vacancies (${result.newJobsCount} newly posted).`,
+      syncedCount: result.syncedCount,
+      totalActive: result.totalActive,
+      newJobsCount: result.newJobsCount,
+      lastSuccessfulSync: jobsStore.lastSuccessfulSync,
+      nextScheduledSync: jobsStore.nextScheduledSync,
+      syncStatus: jobsStore.syncStatus,
+      error: result.error || null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Manual refresh failed. Existing job listings preserved.',
+      lastSuccessfulSync: jobsStore.lastSuccessfulSync,
+    });
+  }
+});
+
+// API Route: System Status & Monitoring Telemetry
+app.get('/api/jobs/status', (req, res) => {
+  return res.json({
+    appName: 'CareerPilot AI',
+    feature: 'Automated Job Opening Updates',
+    schedule: 'Every 6 hours (0 */6 * * *)',
+    provider: 'Remotive Public API (24h verified delay)',
+    lastSuccessfulSync: jobsStore.lastSuccessfulSync,
+    lastAttemptedSync: jobsStore.lastAttemptedSync,
+    nextScheduledSync: jobsStore.nextScheduledSync,
+    syncStatus: jobsStore.syncStatus,
+    lastError: jobsStore.lastError,
+    totalActiveJobs: jobsStore.totalJobs,
+    fresherJobsCount: jobsStore.fresherCount,
+    indiaJobsCount: jobsStore.indiaCount,
+    cooldownWindowSeconds: MANUAL_REFRESH_COOLDOWN_MS / 1000,
+  });
+});
+
+
 // Supabase Connection Verification Proxy
 // Tests authentication against user's Supabase project without browser CORS restrictions
 app.post('/api/supabase/test-connection', async (req, res) => {
@@ -907,9 +1622,12 @@ async function startServer() {
     });
     app.use(viteServer.middlewares);
   } else {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
+    const staticDir = fs.existsSync(path.resolve(__dirname, 'index.html'))
+      ? __dirname
+      : path.resolve(__dirname, 'dist');
+    app.use(express.static(staticDir));
     app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.resolve(staticDir, 'index.html'));
     });
   }
 
@@ -918,4 +1636,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;

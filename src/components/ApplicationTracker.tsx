@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Briefcase,
   Plus,
@@ -18,8 +18,13 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
-import { JobApplication, ApplicationStatus } from '../types';
+import { JobApplication, ApplicationStatus, UserProfile } from '../types';
 import { storage } from '../lib/storage';
+import {
+  fetchUserApplicationsFromCloud,
+  saveApplicationToCloud,
+  deleteApplicationFromCloud,
+} from '../lib/supabase';
 import { InterviewPrepModal } from './InterviewPrepModal';
 
 const STATUS_COLUMNS: Array<{ id: ApplicationStatus; label: string; color: string; border: string }> = [
@@ -31,8 +36,14 @@ const STATUS_COLUMNS: Array<{ id: ApplicationStatus; label: string; color: strin
   { id: 'rejected', label: 'Archived / Rejected', color: 'text-slate-500', border: 'border-slate-900' },
 ];
 
-export const ApplicationTracker: React.FC = () => {
-  const [applications, setApplications] = useState<JobApplication[]>(storage.getApplications());
+interface ApplicationTrackerProps {
+  currentUser?: UserProfile | null;
+}
+
+export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({ currentUser }) => {
+  const [applications, setApplications] = useState<JobApplication[]>(
+    storage.getApplications(currentUser?.id)
+  );
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -57,8 +68,20 @@ export const ApplicationTracker: React.FC = () => {
   const [prepModalApp, setPrepModalApp] = useState<JobApplication | null>(null);
 
   const refreshApplications = () => {
-    setApplications(storage.getApplications());
+    setApplications(storage.getApplications(currentUser?.id));
   };
+
+  useEffect(() => {
+    setApplications(storage.getApplications(currentUser?.id));
+    if (currentUser?.id) {
+      fetchUserApplicationsFromCloud(currentUser.id).then((cloudApps) => {
+        if (cloudApps && cloudApps.length > 0) {
+          storage.saveApplications(cloudApps, currentUser.id);
+          setApplications(cloudApps);
+        }
+      });
+    }
+  }, [currentUser?.id]);
 
   const handleOpenAddModal = () => {
     setEditingApp(null);
@@ -94,32 +117,29 @@ export const ApplicationTracker: React.FC = () => {
     e.preventDefault();
     if (!formCompany || !formTitle) return;
 
+    const appData = {
+      companyName: formCompany,
+      jobTitle: formTitle,
+      location: formLocation,
+      salaryRange: formSalary,
+      applicationDate: formAppDate,
+      status: formStatus,
+      interviewDate: formInterviewDate || undefined,
+      notes: formNotes,
+      jobUrl: formJobUrl || undefined,
+      matchScore: formMatchScore,
+    };
+
     if (editingApp) {
-      storage.updateApplication(editingApp.id, {
-        companyName: formCompany,
-        jobTitle: formTitle,
-        location: formLocation,
-        salaryRange: formSalary,
-        applicationDate: formAppDate,
-        status: formStatus,
-        interviewDate: formInterviewDate || undefined,
-        notes: formNotes,
-        jobUrl: formJobUrl || undefined,
-        matchScore: formMatchScore,
-      });
+      storage.updateApplication(editingApp.id, appData, currentUser?.id);
+      if (currentUser?.id) {
+        saveApplicationToCloud(currentUser.id, { id: editingApp.id, ...appData });
+      }
     } else {
-      storage.addApplication({
-        companyName: formCompany,
-        jobTitle: formTitle,
-        location: formLocation,
-        salaryRange: formSalary,
-        applicationDate: formAppDate,
-        status: formStatus,
-        interviewDate: formInterviewDate || undefined,
-        notes: formNotes,
-        jobUrl: formJobUrl || undefined,
-        matchScore: formMatchScore,
-      });
+      const created = storage.addApplication(appData, currentUser?.id);
+      if (currentUser?.id) {
+        saveApplicationToCloud(currentUser.id, created);
+      }
     }
 
     setIsModalOpen(false);
@@ -128,13 +148,19 @@ export const ApplicationTracker: React.FC = () => {
 
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to remove this job application?')) {
-      storage.deleteApplication(id);
+      storage.deleteApplication(id, currentUser?.id);
+      if (currentUser?.id) {
+        deleteApplicationFromCloud(currentUser.id, id);
+      }
       refreshApplications();
     }
   };
 
   const handleQuickStatusChange = (appId: string, newStatus: ApplicationStatus) => {
-    storage.updateApplication(appId, { status: newStatus });
+    storage.updateApplication(appId, { status: newStatus }, currentUser?.id);
+    if (currentUser?.id) {
+      saveApplicationToCloud(currentUser.id, { id: appId, status: newStatus });
+    }
     refreshApplications();
   };
 

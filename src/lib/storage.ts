@@ -1,52 +1,17 @@
-import { UserProfile, ResumeAnalysisResult, JobMatchResult, CoverLetterResult, JobApplication } from '../types';
-
-export const DEMO_USERS: UserProfile[] = [
-  {
-    id: 'user-maya',
-    name: 'Maya Lin',
-    email: 'maya.lin@student.edu',
-    role: 'fresher',
-    plan: 'free',
-    avatarUrl: '/src/assets/images/avatar_career_student_1793498999647.jpg',
-    headline: 'Computer Science Senior | Aspiring Full-Stack Engineer',
-    universityOrCompany: 'University of California, Berkeley',
-    targetRole: 'Junior Frontend Developer / Software Engineer',
-    bio: 'Passionate about React, TypeScript, and modern UI engineering. Building responsive applications and preparing for 2026 graduate tech roles.',
-    monthlyAnalysisCount: 2,
-    monthlyAnalysisLimit: 9999,
-    createdAt: '2026-09-15',
-  },
-  {
-    id: 'user-alex',
-    name: 'Alex Rivera',
-    email: 'alex.rivera@careerpilot.io',
-    role: 'jobseeker',
-    plan: 'pro',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-    headline: 'Software Engineer (2 Yrs Exp) | Cloud & TypeScript',
-    universityOrCompany: 'Ex-NextGen Labs',
-    targetRole: 'Full Stack Engineer (Mid-Level)',
-    bio: 'Experienced in Node.js microservices, React dashboards, and AWS deployments. Seeking next high-impact engineering role.',
-    monthlyAnalysisCount: 14,
-    monthlyAnalysisLimit: 9999,
-    createdAt: '2026-06-10',
-  },
-  {
-    id: 'user-admin',
-    name: 'Sarah Chen (Admin)',
-    email: 'admin@careerpilot.ai',
-    role: 'admin',
-    plan: 'pro',
-    avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=400&q=80',
-    headline: 'Platform Administrator & Career Director',
-    universityOrCompany: 'CareerPilot AI Global',
-    targetRole: 'Platform Admin',
-    bio: 'Oversees AI models, user quotas, university partnerships, and student placement metrics.',
-    monthlyAnalysisCount: 42,
-    monthlyAnalysisLimit: 9999,
-    createdAt: '2026-01-01',
-  },
-];
+import {
+  UserProfile,
+  ResumeAnalysisResult,
+  JobMatchResult,
+  CoverLetterResult,
+  JobApplication,
+  SkillGapResult,
+  MockInterviewSession,
+  LearningRoadmapResult,
+  SmartOutreachDraft,
+  PortfolioProfileData,
+  SalaryInsightsResult,
+  MentorChatMessage,
+} from '../types';
 
 export const SAMPLE_RESUME_TEXT = `Maya Lin
 San Francisco, CA | (555) 234-5678 | maya.lin@berkeley.edu | linkedin.com/in/mayalin | github.com/mayalin-dev
@@ -109,228 +74,133 @@ Nice to Have:
 • Understanding of relational databases like PostgreSQL.
 • Open-source contributions or active technical portfolio projects.`;
 
-export const INITIAL_APPLICATIONS: JobApplication[] = [
-  {
-    id: 'app-1',
-    companyName: 'Stripe',
-    jobTitle: 'Junior Frontend Engineer',
-    location: 'San Francisco, CA (Hybrid)',
-    salaryRange: '$115,000 - $130,000',
-    applicationDate: '2026-10-18',
-    status: 'interviewing',
-    interviewDate: '2026-11-04',
-    notes: 'Completed technical screen. System architecture interview scheduled with Engineering Manager.',
-    matchScore: 88,
-    jobUrl: 'https://stripe.com/jobs/frontend-engineer',
-    contactPerson: 'David Vance (Senior Recruiter)',
-  },
-  {
-    id: 'app-2',
-    companyName: 'Vercel',
-    jobTitle: 'Product Engineer (Next.js)',
-    location: 'Remote',
-    salaryRange: '$120,000 - $140,000',
-    applicationDate: '2026-10-22',
-    status: 'screening',
-    interviewDate: '2026-11-02',
-    notes: 'Recruiter reached out on LinkedIn regarding open-source React work.',
-    matchScore: 92,
-    jobUrl: 'https://vercel.com/careers/product-engineer',
-    contactPerson: 'Elena Rostova',
-  },
-  {
-    id: 'app-3',
-    companyName: 'Linear',
-    jobTitle: 'Software Engineer — Client Apps',
-    location: 'Remote (US/EU)',
-    salaryRange: '$130,000 - $155,000',
-    applicationDate: '2026-10-26',
-    status: 'applied',
-    notes: 'Submitted resume tailored with high-performance UI keywords and EventSync metrics.',
-    matchScore: 84,
-    jobUrl: 'https://linear.app/careers',
-  },
-  {
-    id: 'app-4',
-    companyName: 'Datadog',
-    jobTitle: 'Associate Software Engineer',
-    location: 'New York, NY',
-    salaryRange: '$110,000 - $125,000',
-    applicationDate: '2026-10-12',
-    status: 'offered',
-    notes: 'Received initial offer package ($118k base + RSUs). Reviewing benefits and relocation support.',
-    matchScore: 86,
-    contactPerson: 'Marcus Cole',
-  },
-  {
-    id: 'app-5',
-    companyName: 'Figma',
-    jobTitle: 'Junior Systems Engineer',
-    location: 'San Francisco, CA',
-    salaryRange: '$125,000 - $145,000',
-    applicationDate: '2026-10-29',
-    status: 'wishlist',
-    notes: 'Preparing cover letter focused on canvas performance and TypeScript design systems.',
-    matchScore: 79,
-  },
-];
-
-export const INITIAL_SAVED_RESUMES: ResumeAnalysisResult[] = [
-  {
-    id: 'res-sample-1',
-    timestamp: '2026-10-25T14:32:00.000Z',
-    candidateName: 'Maya Lin',
-    targetRoleDetected: 'Frontend / Full-Stack Engineer',
-    experienceLevel: 'Fresher / Entry-Level',
-    atsScore: 86,
-    scoresBreakdown: {
-      impact: 84,
-      formatting: 92,
-      brevity: 89,
-      keywords: 88,
-    },
-    extractedSkills: {
-      technical: ['TypeScript', 'JavaScript', 'React', 'Next.js', 'Node.js', 'SQL', 'Git', 'Docker'],
-      soft: ['Team Mentorship', 'Collaboration', 'Problem Solving', 'Communication'],
-      tools: ['Supabase', 'GitHub Actions', 'Jest', 'Figma', 'VS Code'],
-    },
-    strengths: [
-      'Strong metric-backed project bullet points (e.g., 45% latency drop, 800+ users)',
-      'High-demand modern frontend stack clearly showcased in top third of resume',
-      'Clean single-column chronological structure ideal for ATS parsing scanners',
-    ],
-    weaknesses: [
-      'Missing explicit mention of end-to-end automated testing frameworks like Playwright or Cypress',
-      'Could elaborate on production cloud deployment monitoring (e.g. Datadog or Sentry)',
-      'Academic coursework could be condensed to free up space for deeper project architectural details',
-    ],
-    actionVerbsCount: 16,
-    actionVerbsSuggestions: ['Orchestrated', 'Spearheaded', 'Optimized', 'Architected', 'Revitalized'],
-    bulletPointImprovements: [
-      {
-        original: 'Collaborated in a 6-person Agile sprint team building user onboarding flows in React.',
-        improved: 'Spearheaded frontend development of responsive 4-step onboarding flow in React & TypeScript, boosting user signup completion rate by 19%.',
-        reason: 'Added concrete outcome metric and leading active action verb.',
-      },
-    ],
-    recommendedCertifications: [
-      'AWS Certified Cloud Practitioner',
-      'Meta Frontend Professional Certificate',
-    ],
-    summaryReview: 'Exceptional early-career resume with clear technical focus and quantifiable outcomes. Minor optimization for test automation keywords will elevate pass rates for Tier-1 tech screening.',
-    rawResumeText: SAMPLE_RESUME_TEXT,
-  },
-];
-
-// LocalStorage Helper
+// User-scoped LocalStorage Helper
 class StorageService {
-  private USER_KEY = 'cp_current_user_v2';
-  private USERS_LIST_KEY = 'cp_users_list_v2';
-  private APPS_KEY = 'cp_applications_v2';
-  private RESUMES_KEY = 'cp_resumes_v2';
-  private MATCHES_KEY = 'cp_matches_v2';
-  private LETTERS_KEY = 'cp_letters_v2';
-  private MASTER_RESUME_KEY = 'cp_master_resume_text';
+  private USER_KEY = 'cp_current_supabase_user_v3';
 
-  getCurrentUser(): UserProfile {
+  private getKey(prefix: string, userId?: string): string {
+    const activeId = userId || this.getActiveUserId();
+    if (activeId) {
+      return `cp_${activeId}_${prefix}`;
+    }
+    return `cp_guest_${prefix}`;
+  }
+
+  private getActiveUserId(): string | null {
     try {
       const stored = localStorage.getItem(this.USER_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Ensure zero-billing launch users have unlimited monthly allowance
-        if (!parsed.monthlyAnalysisLimit || parsed.monthlyAnalysisLimit < 9999) {
-          parsed.monthlyAnalysisLimit = 9999;
+        if (parsed && parsed.id && !parsed.isDemo) {
+          return parsed.id;
         }
-        return parsed;
+      }
+    } catch {}
+    return null;
+  }
+
+  getCurrentUser(): UserProfile | null {
+    try {
+      const stored = localStorage.getItem(this.USER_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Exclude legacy mock demo personas
+        if (parsed && !parsed.isDemo && parsed.isSupabaseUser) {
+          if (!parsed.monthlyAnalysisLimit || parsed.monthlyAnalysisLimit < 9999) {
+            parsed.monthlyAnalysisLimit = 9999;
+          }
+          return parsed;
+        }
+        // If it was a mock demo user, clear it out
+        if (parsed?.isDemo) {
+          localStorage.removeItem(this.USER_KEY);
+        }
       }
     } catch (e) {
       console.warn('Storage read failed', e);
     }
-    return DEMO_USERS[0];
+    return null;
   }
 
-  setCurrentUser(user: UserProfile): void {
+  setCurrentUser(user: UserProfile | null): void {
+    if (!user) {
+      localStorage.removeItem(this.USER_KEY);
+      return;
+    }
     localStorage.setItem(this.USER_KEY, JSON.stringify(user));
   }
 
-  getAllUsers(): UserProfile[] {
+  getApplications(userId?: string): JobApplication[] {
     try {
-      const stored = localStorage.getItem(this.USERS_LIST_KEY);
+      const key = this.getKey('apps_v3', userId);
+      const stored = localStorage.getItem(key);
       if (stored) return JSON.parse(stored);
     } catch (e) {
       console.warn('Storage read failed', e);
     }
-    return DEMO_USERS;
+    return [];
   }
 
-  saveAllUsers(users: UserProfile[]): void {
-    localStorage.setItem(this.USERS_LIST_KEY, JSON.stringify(users));
+  saveApplications(apps: JobApplication[], userId?: string): void {
+    const key = this.getKey('apps_v3', userId);
+    localStorage.setItem(key, JSON.stringify(apps));
   }
 
-  getApplications(): JobApplication[] {
-    try {
-      const stored = localStorage.getItem(this.APPS_KEY);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      console.warn('Storage read failed', e);
-    }
-    return INITIAL_APPLICATIONS;
-  }
-
-  saveApplications(apps: JobApplication[]): void {
-    localStorage.setItem(this.APPS_KEY, JSON.stringify(apps));
-  }
-
-  addApplication(app: Omit<JobApplication, 'id'>): JobApplication {
-    const apps = this.getApplications();
+  addApplication(app: Omit<JobApplication, 'id'>, userId?: string): JobApplication {
+    const apps = this.getApplications(userId);
     const newApp: JobApplication = {
       ...app,
       id: `app-${Date.now()}`,
     };
     const updated = [newApp, ...apps];
-    this.saveApplications(updated);
+    this.saveApplications(updated, userId);
     return newApp;
   }
 
-  updateApplication(id: string, updates: Partial<JobApplication>): JobApplication | null {
-    const apps = this.getApplications();
-    const idx = apps.findIndex(a => a.id === id);
+  updateApplication(id: string, updates: Partial<JobApplication>, userId?: string): JobApplication | null {
+    const apps = this.getApplications(userId);
+    const idx = apps.findIndex((a) => a.id === id);
     if (idx === -1) return null;
     apps[idx] = { ...apps[idx], ...updates };
-    this.saveApplications(apps);
+    this.saveApplications(apps, userId);
     return apps[idx];
   }
 
-  deleteApplication(id: string): void {
-    const apps = this.getApplications();
-    const filtered = apps.filter(a => a.id !== id);
-    this.saveApplications(filtered);
+  deleteApplication(id: string, userId?: string): void {
+    const apps = this.getApplications(userId);
+    const filtered = apps.filter((a) => a.id !== id);
+    this.saveApplications(filtered, userId);
   }
 
-  getSavedResumes(): ResumeAnalysisResult[] {
+  getSavedResumes(userId?: string): ResumeAnalysisResult[] {
     try {
-      const stored = localStorage.getItem(this.RESUMES_KEY);
+      const key = this.getKey('resumes_v3', userId);
+      const stored = localStorage.getItem(key);
       if (stored) return JSON.parse(stored);
     } catch (e) {
       console.warn('Storage read failed', e);
     }
-    return INITIAL_SAVED_RESUMES;
+    return [];
   }
 
-  saveResumeAnalysis(analysis: ResumeAnalysisResult): void {
-    const existing = this.getSavedResumes();
-    const updated = [analysis, ...existing.filter(r => r.id !== analysis.id)];
-    localStorage.setItem(this.RESUMES_KEY, JSON.stringify(updated.slice(0, 20)));
+  saveResumeAnalysis(analysis: ResumeAnalysisResult, userId?: string): void {
+    const existing = this.getSavedResumes(userId);
+    const updated = [analysis, ...existing.filter((r) => r.id !== analysis.id)];
+    const key = this.getKey('resumes_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 20)));
 
     // Increment user usage
     const user = this.getCurrentUser();
-    user.monthlyAnalysisCount += 1;
-    this.setCurrentUser(user);
+    if (user) {
+      user.monthlyAnalysisCount += 1;
+      this.setCurrentUser(user);
+    }
   }
 
-  getSavedMatches(): JobMatchResult[] {
+  getSavedMatches(userId?: string): JobMatchResult[] {
     try {
-      const stored = localStorage.getItem(this.MATCHES_KEY);
+      const key = this.getKey('matches_v3', userId);
+      const stored = localStorage.getItem(key);
       if (stored) return JSON.parse(stored);
     } catch (e) {
       console.warn('Storage read failed', e);
@@ -338,15 +208,17 @@ class StorageService {
     return [];
   }
 
-  saveJobMatch(match: JobMatchResult): void {
-    const existing = this.getSavedMatches();
-    const updated = [match, ...existing.filter(m => m.id !== match.id)];
-    localStorage.setItem(this.MATCHES_KEY, JSON.stringify(updated.slice(0, 20)));
+  saveJobMatch(match: JobMatchResult, userId?: string): void {
+    const existing = this.getSavedMatches(userId);
+    const updated = [match, ...existing.filter((m) => m.id !== match.id)];
+    const key = this.getKey('matches_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 20)));
   }
 
-  getSavedCoverLetters(): CoverLetterResult[] {
+  getSavedCoverLetters(userId?: string): CoverLetterResult[] {
     try {
-      const stored = localStorage.getItem(this.LETTERS_KEY);
+      const key = this.getKey('letters_v3', userId);
+      const stored = localStorage.getItem(key);
       if (stored) return JSON.parse(stored);
     } catch (e) {
       console.warn('Storage read failed', e);
@@ -354,26 +226,209 @@ class StorageService {
     return [];
   }
 
-  saveCoverLetter(letter: CoverLetterResult): void {
-    const existing = this.getSavedCoverLetters();
-    const updated = [letter, ...existing.filter(l => l.id !== letter.id)];
-    localStorage.setItem(this.LETTERS_KEY, JSON.stringify(updated.slice(0, 20)));
+  saveCoverLetter(letter: CoverLetterResult, userId?: string): void {
+    const existing = this.getSavedCoverLetters(userId);
+    const updated = [letter, ...existing.filter((l) => l.id !== letter.id)];
+    const key = this.getKey('letters_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 20)));
   }
 
-  getMasterResumeText(): string {
-    const stored = localStorage.getItem(this.MASTER_RESUME_KEY);
-    return stored || SAMPLE_RESUME_TEXT;
+  getMasterResumeText(userId?: string): string {
+    const key = this.getKey('master_resume_v3', userId);
+    const stored = localStorage.getItem(key);
+    return stored || '';
   }
 
-  saveMasterResumeText(text: string): void {
-    localStorage.setItem(this.MASTER_RESUME_KEY, text);
+  saveMasterResumeText(text: string, userId?: string): void {
+    const key = this.getKey('master_resume_v3', userId);
+    localStorage.setItem(key, text);
   }
 
-  resetAllData(): void {
-    localStorage.clear();
-    this.setCurrentUser(DEMO_USERS[0]);
-    this.saveApplications(INITIAL_APPLICATIONS);
-    this.saveMasterResumeText(SAMPLE_RESUME_TEXT);
+  // -------------------------------------------------------------
+  // 1. Skill Gap Analyses
+  // -------------------------------------------------------------
+  getSkillGapAnalyses(userId?: string): SkillGapResult[] {
+    try {
+      const key = this.getKey('skill_gaps_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return [];
+  }
+
+  saveSkillGapAnalysis(analysis: SkillGapResult, userId?: string): void {
+    const existing = this.getSkillGapAnalyses(userId);
+    const updated = [analysis, ...existing.filter((item) => item.id !== analysis.id)];
+    const key = this.getKey('skill_gaps_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 20)));
+  }
+
+  // -------------------------------------------------------------
+  // 2. Mock Interview Sessions
+  // -------------------------------------------------------------
+  getMockInterviewSessions(userId?: string): MockInterviewSession[] {
+    try {
+      const key = this.getKey('interviews_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return [];
+  }
+
+  saveMockInterviewSession(session: MockInterviewSession, userId?: string): void {
+    const existing = this.getMockInterviewSessions(userId);
+    const updated = [session, ...existing.filter((item) => item.id !== session.id)];
+    const key = this.getKey('interviews_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 25)));
+  }
+
+  // -------------------------------------------------------------
+  // 3. Learning Roadmaps & Progress
+  // -------------------------------------------------------------
+  getLearningRoadmaps(userId?: string): LearningRoadmapResult[] {
+    try {
+      const key = this.getKey('roadmaps_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return [];
+  }
+
+  saveLearningRoadmap(roadmap: LearningRoadmapResult, userId?: string): void {
+    const existing = this.getLearningRoadmaps(userId);
+    const updated = [roadmap, ...existing.filter((item) => item.id !== roadmap.id)];
+    const key = this.getKey('roadmaps_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 10)));
+  }
+
+  updateRoadmapProgress(
+    roadmapId: string,
+    weekNumber: number,
+    dayNumber: number,
+    completed: boolean,
+    userId?: string
+  ): void {
+    const roadmaps = this.getLearningRoadmaps(userId);
+    const target = roadmaps.find((r) => r.id === roadmapId);
+    if (!target) return;
+
+    const module = target.weeklyModules.find((m) => m.weekNumber === weekNumber);
+    if (module) {
+      const task = module.dailyTasks.find((t) => t.dayNumber === dayNumber);
+      if (task) {
+        task.completed = completed;
+      }
+      module.completed = module.dailyTasks.every((t) => t.completed);
+    }
+    this.saveLearningRoadmap(target, userId);
+  }
+
+  // -------------------------------------------------------------
+  // 4. Smart Outreach Drafts
+  // -------------------------------------------------------------
+  getSmartOutreachDrafts(userId?: string): SmartOutreachDraft[] {
+    try {
+      const key = this.getKey('outreach_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return [];
+  }
+
+  saveSmartOutreachDraft(draft: SmartOutreachDraft, userId?: string): void {
+    const existing = this.getSmartOutreachDrafts(userId);
+    const updated = [draft, ...existing.filter((item) => item.id !== draft.id)];
+    const key = this.getKey('outreach_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 30)));
+  }
+
+  // -------------------------------------------------------------
+  // 5. Portfolio Builder Profiles
+  // -------------------------------------------------------------
+  getPortfolioData(userId?: string): PortfolioProfileData | null {
+    try {
+      const key = this.getKey('portfolio_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return null;
+  }
+
+  savePortfolioData(data: PortfolioProfileData, userId?: string): void {
+    const key = this.getKey('portfolio_v3', userId);
+    localStorage.setItem(key, JSON.stringify(data));
+  }
+
+  // -------------------------------------------------------------
+  // 6. Salary & Career Insights Searches
+  // -------------------------------------------------------------
+  getSalarySearches(userId?: string): SalaryInsightsResult[] {
+    try {
+      const key = this.getKey('salaries_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return [];
+  }
+
+  saveSalarySearch(search: SalaryInsightsResult, userId?: string): void {
+    const existing = this.getSalarySearches(userId);
+    const updated = [search, ...existing.filter((item) => item.id !== search.id)];
+    const key = this.getKey('salaries_v3', userId);
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 15)));
+  }
+
+  // -------------------------------------------------------------
+  // 7. Career Mentor Chat History
+  // -------------------------------------------------------------
+  getMentorChatHistory(userId?: string): MentorChatMessage[] {
+    try {
+      const key = this.getKey('mentor_chat_v3', userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Storage read failed', e);
+    }
+    return [];
+  }
+
+  saveMentorChatHistory(messages: MentorChatMessage[], userId?: string): void {
+    const key = this.getKey('mentor_chat_v3', userId);
+    localStorage.setItem(key, JSON.stringify(messages.slice(-50)));
+  }
+
+  clearMentorChatHistory(userId?: string): void {
+    const key = this.getKey('mentor_chat_v3', userId);
+    localStorage.removeItem(key);
+  }
+
+  clearUserData(userId?: string): void {
+    const activeId = userId || this.getActiveUserId();
+    if (!activeId) return;
+    localStorage.removeItem(`cp_${activeId}_apps_v3`);
+    localStorage.removeItem(`cp_${activeId}_resumes_v3`);
+    localStorage.removeItem(`cp_${activeId}_matches_v3`);
+    localStorage.removeItem(`cp_${activeId}_letters_v3`);
+    localStorage.removeItem(`cp_${activeId}_master_resume_v3`);
+    localStorage.removeItem(`cp_${activeId}_skill_gaps_v3`);
+    localStorage.removeItem(`cp_${activeId}_interviews_v3`);
+    localStorage.removeItem(`cp_${activeId}_roadmaps_v3`);
+    localStorage.removeItem(`cp_${activeId}_outreach_v3`);
+    localStorage.removeItem(`cp_${activeId}_portfolio_v3`);
+    localStorage.removeItem(`cp_${activeId}_salaries_v3`);
+    localStorage.removeItem(`cp_${activeId}_mentor_chat_v3`);
   }
 }
 
